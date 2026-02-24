@@ -28,6 +28,59 @@
       </div>
     </div>
 
+    <!-- NEW: Gender (Classification) Filter -->
+    <div>
+      <h3 class="text-lg font-display-en font-bold mb-4">
+        {{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}
+      </h3>
+      <div class="space-y-2">
+        <button
+          @click="updateFilter('classification', undefined)"
+          :class="[
+            'w-full text-left px-4 py-3 rounded-lg transition-all duration-200',
+            !filters.classification
+              ? 'bg-primary-500 text-white shadow-gold'
+              : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+          ]"
+        >
+          {{ currentLanguage === 'en' ? 'All' : 'الكل' }}
+        </button>
+        <button
+          @click="updateFilter('classification', 'M')"
+          :class="[
+            'w-full text-left px-4 py-3 rounded-lg transition-all duration-200',
+            filters.classification === 'M'
+              ? 'bg-primary-500 text-white shadow-gold'
+              : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+          ]"
+        >
+          {{ currentLanguage === 'en' ? 'Men' : 'رجال' }}
+        </button>
+        <button
+          @click="updateFilter('classification', 'F')"
+          :class="[
+            'w-full text-left px-4 py-3 rounded-lg transition-all duration-200',
+            filters.classification === 'F'
+              ? 'bg-primary-500 text-white shadow-gold'
+              : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+          ]"
+        >
+          {{ currentLanguage === 'en' ? 'Women' : 'نساء' }}
+        </button>
+        <button
+          @click="updateFilter('classification', 'U')"
+          :class="[
+            'w-full text-left px-4 py-3 rounded-lg transition-all duration-200',
+            filters.classification === 'U'
+              ? 'bg-primary-500 text-white shadow-gold'
+              : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+          ]"
+        >
+          {{ currentLanguage === 'en' ? 'Unisex' : 'للجنسين' }}
+        </button>
+      </div>
+    </div>
+
     <!-- Price Range -->
     <div>
       <h3 class="text-lg font-display-en font-bold mb-4">

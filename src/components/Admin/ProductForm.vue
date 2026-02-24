@@ -1,4 +1,4 @@
-<!-- src/components/Admin/ProductFormModal.vue -->
+<!-- src/components/Admin/ProductForm.vue -->
 <template>
   <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
     <!-- Background overlay -->
@@ -544,6 +544,48 @@
               </p>
             </div>
 
+            <!-- Gender Classification Field -->
+            <div class="space-y-2">
+              <label class="block text-sm font-medium text-gray-700">
+                {{ t('Classification') }} <span class="text-red-500">*</span>
+              </label>
+              <div class="flex gap-4 flex-wrap">
+                <label class="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    v-model="productData.classification"
+                    value="M"
+                    required
+                    @change="onClassificationChange"
+                    class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                  />
+                  <span class="text-sm text-gray-700">{{ t('Male') }}</span>
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    v-model="productData.classification"
+                    value="F"
+                    required
+                    @change="onClassificationChange"
+                    class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                  />
+                  <span class="text-sm text-gray-700">{{ t('Female') }}</span>
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    v-model="productData.classification"
+                    value="U"
+                    required
+                    @change="onClassificationChange"
+                    class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                  />
+                  <span class="text-sm text-gray-700">{{ t('Unisex') }}</span>
+                </label>
+              </div>
+            </div>
+
             <!-- Category & Price -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -790,12 +832,25 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1">
                   {{ t('SKU') }}
                 </label>
-                <input
-                  v-model="productData.sku"
-                  type="text"
-                  :placeholder="t('NOIR-100-EDP')"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-                />
+                <div class="relative">
+                  <input
+                    v-model="productData.sku"
+                    type="text"
+                    readonly
+                    :placeholder="skuLoading ? t('Generating...') : (editing ? '' : t('Auto-generated'))"
+                    class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-gray-600 text-sm pr-10"
+                  />
+                  <!-- Loading spinner -->
+                  <div v-if="skuLoading" class="absolute right-2 top-1/2 -translate-y-1/2">
+                    <svg class="animate-spin h-4 w-4 text-primary-500" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </div>
+                </div>
+                <!-- Warning message for fallback SKU -->
+                <p v-if="skuWarning" class="mt-1 text-sm text-yellow-600">{{ skuWarning }}</p>
+                <p v-if="skuError" class="mt-1 text-sm text-red-600">{{ skuError }}</p>
               </div>
             </div>
 
@@ -895,7 +950,7 @@
                 v-else-if="currentStep === 2"
                 type="button"
                 @click="saveProduct"
-                :disabled="loading || !canSave"
+                :disabled="loading || !canSave || skuLoading || !productData.sku"
                 class="w-full sm:w-auto px-4 py-2.5 text-sm font-semibold text-white bg-primary-600 rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <template v-if="loading">
@@ -925,7 +980,7 @@ import { useBrandsStore } from '@/stores/brands'
 import { useAuthStore } from '@/stores/auth'
 import type { Product, Category, Brand } from '@/types'
 import { authNotification } from '@/utils/notifications'
-import { collection, doc, writeBatch, serverTimestamp } from 'firebase/firestore'
+import { collection, doc, writeBatch, serverTimestamp, query, where, getDocs, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/firebase/config'
 
 const languageStore = useLanguageStore()
@@ -945,11 +1000,54 @@ const emit = defineEmits<{
   save: [data: {
     productData: any
     brandId?: string
+    productId?: string   // for editing
     createNewBrand?: boolean
     newBrandData?: any
   }]
   saved: []
 }>()
+
+// ========== STRICT BRAND ABBREVIATION MAPPING ==========
+const BRAND_CODES: Record<string, string> = {
+  "Baccarat": "BC",
+  "Burberry Her": "BH",
+  "Calvin Klein": "CK",
+  "Dior": "DI",
+  "Dolcy & Gabana": "DG",
+  "Escada": "EE",
+  "Giorgio Armani": "GA",
+  "Good Girl": "GG",
+  "Gucci": "GU",
+  "Jean Paul Gaultier": "JP",
+  "Kayali": "KA",
+  "La costa": "LC",
+  "Lancome": "LN",
+  "Latafa": "LF",
+  "laverne": "LA",
+  "Moscino": "MS",
+  "Nishan": "NI",
+  "Louis Vuitton": "LV",
+  "Paco Rabanne": "PR",
+  "Parfums de Maely": "PM",
+  "Scandal": "SC",
+  "TOM FORD": "TF",
+  "Valantino": "VA",
+  "Versace": "VR",
+  "Victoria's Secret": "VS",
+  "Yves Saint Laurent": "YL"
+}
+
+// Helper: get official abbreviation or fallback to dynamic (first two letters)
+const getBrandAbbreviation = (brandName: string): { code: string, isFallback: boolean } => {
+  const normalized = brandName.trim()
+  const official = BRAND_CODES[normalized]
+  if (official) {
+    return { code: official, isFallback: false }
+  }
+  // Fallback: take first two uppercase letters (remove spaces, take first two chars)
+  const fallback = normalized.replace(/\s+/g, '').substring(0, 2).toUpperCase()
+  return { code: fallback, isFallback: true }
+}
 
 // Step management
 const currentStep = ref(1)
@@ -988,6 +1086,7 @@ const productData = reactive({
   price: 0,
   size: '',
   concentration: '',
+  classification: '', // M, F, U
   description: { en: '', ar: '' },
   notes: { top: [''], heart: [''], base: [''] },
   imageUrl: '',
@@ -999,6 +1098,9 @@ const productData = reactive({
   sku: ''
 })
 
+// NEW: Store original product for change tracking
+const originalProduct = ref<Product | null>(null)
+
 // Product image state
 const productImageFile = ref<File | null>(null)
 const productImageBase64 = ref('')
@@ -1009,6 +1111,11 @@ const productImageInput = ref<HTMLInputElement | null>(null)
 const loading = ref(false)
 const errors = reactive<Record<string, any>>({})
 const brandErrors = reactive<Record<string, string>>({})
+
+// SKU generation state
+const skuLoading = ref(false)
+const skuError = ref('')
+const skuWarning = ref('')
 
 // Computed
 const editing = computed(() => !!props.product?.id)
@@ -1024,7 +1131,10 @@ const canProceedToProductDetails = computed(() => {
 })
 
 const canSave = computed(() => {
-  return productData.name.en.trim() &&
+  return !skuLoading.value &&
+         productData.sku &&
+         productData.classification &&
+         productData.name.en.trim() &&
          productData.name.ar.trim() &&
          productData.category &&
          productData.price > 0 &&
@@ -1072,7 +1182,6 @@ const compressBase64Image = (base64: string, maxSizeKB = 100): string => {
 }
 
 // ========== BRAND IMAGE METHODS ==========
-
 const previewBrandImage = (url: string) => {
   if (url && isValidUrl(url)) {
     brandImagePreview.value = url
@@ -1133,7 +1242,6 @@ const handleBrandImageError = () => {
 }
 
 // ========== PRODUCT IMAGE METHODS ==========
-
 const previewProductImage = (url: string) => {
   if (url && isValidUrl(url)) {
     productImagePreview.value = url
@@ -1194,7 +1302,6 @@ const handleProductImageError = () => {
 }
 
 // ========== BRAND SEARCH METHODS ==========
-
 const loadBrands = async () => {
   brandsLoading.value = true
   try {
@@ -1275,7 +1382,6 @@ const clearBrandSelection = () => {
 }
 
 // ========== BRAND SLUG METHODS ==========
-
 const generateBrandSlug = () => {
   if (!newBrand.name) return
   
@@ -1290,7 +1396,6 @@ const generateBrandSlug = () => {
 }
 
 // ========== PRODUCT SLUG METHODS ==========
-
 const generateProductSlug = () => {
   if (!productData.name.en) return
   
@@ -1305,7 +1410,6 @@ const generateProductSlug = () => {
 }
 
 // ========== NOTES METHODS ==========
-
 const addNote = (type: 'top' | 'heart' | 'base') => {
   productData.notes[type].push('')
 }
@@ -1318,7 +1422,6 @@ const removeNote = (type: 'top' | 'heart' | 'base', index: number) => {
 }
 
 // ========== HELPER GETTERS ==========
-
 const getBrandName = (): string => {
   if (brandSelectionMode.value === 'existing' && selectedBrand.value) {
     return selectedBrand.value.name
@@ -1353,7 +1456,6 @@ const getBrandImage = (): string => {
 }
 
 // ========== NAVIGATION METHODS ==========
-
 const goToStep = (step: number) => {
   console.log('🔀 Navigating to step:', step)
   
@@ -1372,15 +1474,113 @@ const goToStep = (step: number) => {
   console.log('✅ Current step:', currentStep.value)
 }
 
-// ========== VALIDATION METHODS ==========
+// ========== SKU GENERATION (STRICT WITH FALLBACK) ==========
+const onClassificationChange = () => {
+  if (!editing.value) {
+    generateStrictSKU()
+  }
+}
 
+watch(
+  [() => selectedBrand.value, () => newBrand.name, () => brandSelectionMode.value],
+  () => {
+    if (!editing.value) {
+      generateStrictSKU()
+    }
+  },
+  { deep: true }
+)
+
+/**
+ * Generates SKU using the official mapping if available, otherwise falls back to dynamic code.
+ * P.N + BrandAbbreviation + GenderCode + 3-digit zero-padded package number (starting from 001)
+ */
+const generateStrictSKU = async () => {
+  if (editing.value) return
+
+  // Determine brand name
+  let brandName = ''
+  if (brandSelectionMode.value === 'existing' && selectedBrand.value) {
+    brandName = selectedBrand.value.name
+  } else if (brandSelectionMode.value === 'new' && newBrand.name) {
+    brandName = newBrand.name
+  }
+
+  const gender = productData.classification
+  if (!brandName || !gender) {
+    productData.sku = ''
+    return
+  }
+
+  skuLoading.value = true
+  skuError.value = ''
+  skuWarning.value = ''
+
+  try {
+    // 1. Get brand abbreviation (official or fallback)
+    const { code: brandAbbr, isFallback } = getBrandAbbreviation(brandName)
+    if (isFallback) {
+      skuWarning.value = t('Brand not in official mapping, using provisional code. Please update the mapping later.')
+    }
+
+    // 2. Determine next package number (starting at 001)
+    let packageNumber = '001'
+
+    if (brandSelectionMode.value === 'existing' && selectedBrandId.value) {
+      // Query existing products of this brand for SKUs with prefix P.N{brandAbbr}{gender}
+      const productsRef = collection(db, 'brands', selectedBrandId.value, 'products')
+      const prefix = `P.N${brandAbbr}${gender}`
+      const q = query(
+        productsRef,
+        where('sku', '>=', prefix),
+        where('sku', '<=', prefix + '\uf8ff'),
+        orderBy('sku', 'desc'),
+        limit(1)
+      )
+
+      const snapshot = await getDocs(q)
+      if (!snapshot.empty) {
+        const lastSku = snapshot.docs[0].data().sku
+        const match = lastSku.match(/\d{3}$/)
+        if (match) {
+          const lastNumber = parseInt(match[0], 10)
+          const nextNumber = lastNumber + 1
+          packageNumber = nextNumber.toString().padStart(3, '0')
+        }
+      }
+    } // For new brand, packageNumber stays '001'
+
+    // 3. Assemble final SKU
+    const sku = `P.N${brandAbbr}${gender}${packageNumber}`
+    productData.sku = sku
+  } catch (error: any) {
+    console.error('SKU generation error:', error)
+    skuError.value = error.message || t('Failed to generate SKU')
+    productData.sku = ''
+  } finally {
+    skuLoading.value = false
+  }
+}
+
+// ========== UNIQUENESS CHECK ==========
+const ensureSkuUnique = async (brandId: string, sku: string): Promise<boolean> => {
+  const productsRef = collection(db, 'brands', brandId, 'products')
+  const q = query(productsRef, where('sku', '==', sku))
+  const snapshot = await getDocs(q)
+
+  if (editing.value && props.product?.id) {
+    return snapshot.docs.every(doc => doc.id !== props.product!.id)
+  }
+  return snapshot.empty
+}
+
+// ========== VALIDATION METHODS ==========
 const validateForm = (): boolean => {
   let isValid = true
-  
-  // Reset errors
+
   Object.keys(errors).forEach(key => delete errors[key])
   Object.keys(brandErrors).forEach(key => delete brandErrors[key])
-  
+
   // Validate brand selection
   if (brandSelectionMode.value === 'existing') {
     if (!selectedBrandId.value) {
@@ -1392,135 +1592,175 @@ const validateForm = (): boolean => {
       brandErrors.name = t('Brand name is required')
       isValid = false
     }
-    
+
     if (!newBrand.slug.trim()) {
       brandErrors.slug = t('Brand slug is required')
       isValid = false
     }
-    
+
     if (!newBrand.category) {
       brandErrors.category = t('Brand category is required')
       isValid = false
     }
-    
+
     if (!newBrand.imageUrl && !brandImageBase64.value) {
       brandErrors.image = t('Brand image is required')
       isValid = false
     }
   }
-  
+
   // Validate product data
+  if (!productData.classification) {
+    errors.classification = t('Classification is required')
+    isValid = false
+  }
+
   if (!productData.name.en.trim()) {
     errors.nameEn = t('English name is required')
     isValid = false
   }
-  
+
   if (!productData.name.ar.trim()) {
     errors.nameAr = t('Arabic name is required')
     isValid = false
   }
-  
+
   if (!productData.imageUrl && !productImageBase64.value) {
     errors.image = t('Product image is required')
     isValid = false
   }
-  
+
   if (!productData.category) {
     errors.category = t('Category is required')
     isValid = false
   }
-  
+
   if (!productData.price || productData.price <= 0) {
     errors.price = t('Valid price is required')
     isValid = false
   }
-  
+
   if (!productData.size) {
     errors.size = t('Size is required')
     isValid = false
   }
-  
+
   if (!productData.concentration) {
     errors.concentration = t('Concentration is required')
     isValid = false
   }
-  
+
   if (!productData.description.en.trim()) {
     errors.descEn = t('English description is required')
     isValid = false
   }
-  
+
   if (!productData.description.ar.trim()) {
     errors.descAr = t('Arabic description is required')
     isValid = false
   }
-  
+
   return isValid
 }
 
-// ========== SAVE METHODS ==========
+// ========== CHANGE DETECTION ==========
+const getChangedFields = (): Record<string, any> => {
+  if (!originalProduct.value) return {}
 
+  const changed: Record<string, any> = {}
+  const orig = originalProduct.value
+
+  // Compare simple fields
+  const simpleFields = [
+    'slug', 'category', 'price', 'size', 'concentration', 'classification',
+    'isBestSeller', 'isFeatured', 'isActive', 'sku', 'imageUrl'
+  ] as const
+  simpleFields.forEach(field => {
+    if (productData[field] !== orig[field]) {
+      changed[field] = productData[field]
+    }
+  })
+
+  // Compare stock (mapped from stockQuantity in original)
+  if (productData.stock !== orig.stockQuantity) {
+    changed.stock = productData.stock
+  }
+
+  // Compare nested name
+  if (JSON.stringify(productData.name) !== JSON.stringify(orig.name)) {
+    changed.name = { ...productData.name }
+  }
+
+  // Compare description
+  if (JSON.stringify(productData.description) !== JSON.stringify(orig.description)) {
+    changed.description = { ...productData.description }
+  }
+
+  // Compare notes
+  if (JSON.stringify(productData.notes) !== JSON.stringify(orig.notes)) {
+    changed.notes = { ...productData.notes }
+  }
+
+  return changed
+}
+
+// ========== SAVE METHODS ==========
 const saveProduct = async () => {
   console.log('💾 Save button clicked')
-  
+
   if (!authStore.isAuthenticated) {
-    console.log('❌ Not authenticated')
     alert(t('You must be logged in to perform this action'))
     return
   }
-  
+
   if (!authStore.isSuperAdmin) {
-    console.log('❌ Not super admin')
     alert(t('Only super-admins can manage products'))
     return
   }
-  
+
   if (!validateForm()) {
     console.log('❌ Form validation failed')
     return
   }
-  
+
+  if (skuLoading.value) {
+    alert(t('Please wait while SKU is being generated'))
+    return
+  }
+
   loading.value = true
-  console.log('⏳ Loading started...')
-  
+
   try {
     // Generate slug if not provided
     if (!productData.slug && productData.name.en) {
       generateProductSlug()
     }
-    
+
     // Prepare product image
     let productImage = productData.imageUrl
     if (productImageBase64.value) {
       productImage = productImageBase64.value
     }
-    
+
     // Clean notes - remove empty strings
     const cleanNotes = {
       top: productData.notes.top.filter((n: string) => n && n.trim() !== ''),
       heart: productData.notes.heart.filter((n: string) => n && n.trim() !== ''),
       base: productData.notes.base.filter((n: string) => n && n.trim() !== '')
     }
-    
-    // Ensure arrays have at least one empty string if empty
+
     if (cleanNotes.top.length === 0) cleanNotes.top = ['']
     if (cleanNotes.heart.length === 0) cleanNotes.heart = ['']
     if (cleanNotes.base.length === 0) cleanNotes.base = ['']
-    
-    // Create a clean product payload WITHOUT imageFile
+
     const productPayload = {
-      name: { 
-        en: productData.name.en, 
-        ar: productData.name.ar 
-      },
-      description: { 
-        en: productData.description.en, 
-        ar: productData.description.ar 
-      },
+      name: { en: productData.name.en, ar: productData.name.ar },
+      description: { en: productData.description.en, ar: productData.description.ar },
       notes: cleanNotes,
       price: Number(productData.price) || 0,
       size: productData.size,
       concentration: productData.concentration,
+      classification: productData.classification,
       imageUrl: productImage,
       slug: productData.slug || '',
       category: productData.category,
@@ -1530,40 +1770,53 @@ const saveProduct = async () => {
       sku: productData.sku || '',
       isActive: productData.isActive !== false
     }
-    
+
     console.log('📦 Product payload prepared:', productPayload)
-    
+
     if (editing.value) {
-      // TODO: Implement edit
-      console.log('✏️ Editing product:', productPayload)
-      emit('save', { productData: productPayload })
-    } else if (brandSelectionMode.value === 'existing' && selectedBrandId.value) {
-      // Add product to existing brand
-      console.log('📦 Adding product to existing brand:', selectedBrandId.value)
-      
-      const brand = brandsStore.brands.find(b => b.id === selectedBrandId.value)
-      if (!brand) {
-        throw new Error('Brand not found')
+      // EDIT EXISTING PRODUCT
+      if (!props.product?.brandId) {
+        throw new Error('Product brand ID missing')
       }
-      
+
+      // Get only changed fields
+      const changedFields = getChangedFields()
+      console.log('✏️ Changed fields:', changedFields)
+
+      if (Object.keys(changedFields).length === 0) {
+        // No changes, just close
+        emit('close')
+        return
+      }
+
+      emit('save', { 
+        productData: changedFields,  // Send only changed fields
+        brandId: props.product.brandId,
+        productId: props.product.id
+      })
+    } else if (brandSelectionMode.value === 'existing' && selectedBrandId.value) {
+      // ADD PRODUCT TO EXISTING BRAND
+      const brand = brandsStore.brands.find(b => b.id === selectedBrandId.value)
+      if (!brand) throw new Error('Brand not found')
+
+      // Uniqueness check
+      const isUnique = await ensureSkuUnique(brand.id, productData.sku)
+      if (!isUnique) {
+        throw new Error(t('SKU already exists for this brand. Please try again.'))
+      }
+
       const batch = writeBatch(db)
       const productsRef = collection(db, 'brands', brand.id, 'products')
       const productDocRef = doc(productsRef)
-      
-      // Create clean Firestore data with no undefined values
+
       const firestoreData = {
-        name: { 
-          en: productPayload.name.en, 
-          ar: productPayload.name.ar 
-        },
-        description: { 
-          en: productPayload.description.en, 
-          ar: productPayload.description.ar 
-        },
+        name: productPayload.name,
+        description: productPayload.description,
         notes: productPayload.notes,
         price: productPayload.price,
         size: productPayload.size,
         concentration: productPayload.concentration,
+        classification: productPayload.classification,
         imageUrl: productImage,
         slug: productPayload.slug,
         category: productPayload.category,
@@ -1578,31 +1831,19 @@ const saveProduct = async () => {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       }
-      
-      console.log('📦 Saving to Firestore:', firestoreData)
-      
+
       batch.set(productDocRef, firestoreData)
       await batch.commit()
-      
-      console.log('✅ Product added successfully to brand:', brand.id)
-      
+
       authNotification.loggedIn(t('Product added successfully'))
-      
-      emit('save', { 
-        productData: productPayload,
-        brandId: brand.id,
-        createNewBrand: false
-      })
+      emit('save', { productData: productPayload, brandId: brand.id, createNewBrand: false })
     } else if (brandSelectionMode.value === 'new') {
-      // Create new brand with product
-      console.log('🆕 Creating new brand with product...')
-      
-      // Prepare brand image
+      // CREATE NEW BRAND WITH PRODUCT
       let brandImage = newBrand.imageUrl
       if (brandImageBase64.value) {
         brandImage = brandImageBase64.value
       }
-      
+
       const brandData = {
         name: newBrand.name,
         slug: newBrand.slug,
@@ -1612,62 +1853,44 @@ const saveProduct = async () => {
         isActive: newBrand.isActive !== false,
         image: brandImage
       }
-      
+
       const productForBrand = {
         ...productPayload,
         brand: brandData.name,
         brandSlug: brandData.slug
       }
-      
-      // Check total size
+
       const totalSize = JSON.stringify([productForBrand]).length
-      console.log('📊 Total data size:', formatBytes(totalSize))
-      
       if (totalSize > 1 * 1024 * 1024) {
         throw new Error('Total data exceeds Firestore 1MB limit. Please reduce image sizes.')
       }
-      
-      const brandId = await brandsStore.addBrandWithProducts(
-        brandData,
-        [productForBrand]
-      )
-      
+
+      const brandId = await brandsStore.addBrandWithProducts(brandData, [productForBrand])
       if (brandId) {
-        console.log('✅ Brand and product created successfully:', brandId)
         authNotification.loggedIn(t('Brand and product added successfully'))
-        
-        emit('save', { 
-          productData: productPayload,
-          createNewBrand: true,
-          newBrandData: brandData
-        })
+        emit('save', { productData: productPayload, createNewBrand: true, newBrandData: brandData })
       } else {
         throw new Error('Failed to create brand')
       }
     }
-    
-    // Refresh products
+
     await productsStore.refreshProducts()
-    
-    // Emit saved event and close
     emit('saved')
     emit('close')
-    
+
   } catch (error: any) {
     console.error('❌ Error saving product:', error)
-    
-    if (error.message?.includes('permission') || error.message?.includes('Missing or insufficient')) {
+    if (error.message?.includes('SKU already exists')) {
+      alert(error.message)
+    } else if (error.message?.includes('permission') || error.message?.includes('Missing or insufficient')) {
       alert(t('Permission denied. Please check if you have super-admin privileges.'))
     } else if (error.message?.includes('longer than 1048487 bytes')) {
       alert(t('Image file is too large. Please use smaller images (under 100KB each).'))
-    } else if (error.message?.includes('already exists')) {
-      alert(t('Brand slug already exists. Please choose a different slug.'))
     } else {
       alert(t('Failed to save: ') + (error.message || t('Unknown error')))
     }
   } finally {
     loading.value = false
-    console.log('🏁 Loading finished')
   }
 }
 
@@ -1677,29 +1900,30 @@ const close = () => {
 }
 
 // ========== INITIALIZATION ==========
-
 onMounted(async () => {
   await loadBrands()
-  
-  // If brand prop is provided, select it
+
   if (props.brand) {
     selectedBrandId.value = props.brand.id
     selectedBrand.value = props.brand
     brandSelectionMode.value = 'existing'
   }
-  
-  // If editing an existing product
+
   if (props.product) {
+    // Store original for change tracking
+    originalProduct.value = { ...props.product }
+
     Object.assign(productData, {
       ...props.product,
       imageFile: undefined
     })
-    
+    if (props.product.classification) {
+      productData.classification = props.product.classification
+    }
     if (props.product.imageUrl) {
       productImagePreview.value = props.product.imageUrl
       productData.imageUrl = props.product.imageUrl
     }
-    
     if (props.product.notes) {
       productData.notes = {
         top: props.product.notes.top?.length ? props.product.notes.top : [''],
@@ -1707,8 +1931,6 @@ onMounted(async () => {
         base: props.product.notes.base?.length ? props.product.notes.base : ['']
       }
     }
-    
-    // If product has brandId, pre-select it
     if (props.product.brandId) {
       const brand = brandsStore.brands.find(b => b.id === props.product!.brandId)
       if (brand) {
@@ -1718,22 +1940,18 @@ onMounted(async () => {
       }
     }
   }
-  
-  // Keyboard event listener
+
   const handleKeydown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      close()
-    }
+    if (e.key === 'Escape') close()
   }
-  
   document.addEventListener('keydown', handleKeydown)
-  
+
   return () => {
     document.removeEventListener('keydown', handleKeydown)
   }
 })
 </script>
-
+   
 <style scoped>
 /* Custom scrollbar */
 .overflow-y-auto::-webkit-scrollbar,

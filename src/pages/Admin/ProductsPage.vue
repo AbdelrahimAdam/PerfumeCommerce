@@ -4,27 +4,6 @@
     <!-- Header -->
     <div class="bg-white border-b border-gray-200">
       <div class="px-8 py-6">
-        <!-- Spark Plan Warning -->
-        <div class="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <div class="flex items-start gap-3">
-            <svg class="w-6 h-6 text-yellow-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-            </svg>
-            <div>
-              <h3 class="font-semibold text-yellow-800 mb-1">Spark Plan Notice</h3>
-              <p class="text-yellow-700 text-sm">
-                You are on Firebase's free Spark Plan. Product data is read-only from Firebase. 
-                Changes made here are saved locally only and will reset on refresh.
-              </p>
-              <p class="text-yellow-700 text-sm mt-1">
-                <strong>To permanently manage products:</strong> 
-                <a href="#export-section" class="underline hover:text-yellow-800">Export data</a> and 
-                update in Firebase Console.
-              </p>
-            </div>
-          </div>
-        </div>
-
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 class="text-2xl font-display-en font-bold text-gray-900">
@@ -680,7 +659,7 @@ import ProductFormModal from '@/components/Admin/ProductForm.vue'
 import type { Product, Category, Brand } from '@/types'
 import { authNotification } from '@/utils/notifications'
 import debounce from 'lodash/debounce'
-import { collection, doc, writeBatch, serverTimestamp } from 'firebase/firestore'
+import { collection, doc, writeBatch, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/firebase/config'
 
 const languageStore = useLanguageStore()
@@ -832,13 +811,8 @@ const getCategoryDisplayName = (category: Category) => {
 
 const getCategoryName = (categoryId: string) => {
   if (!categoryId) return ''
-  
   const category = productsStore.categories.find(cat => cat.id === categoryId)
-  if (category) {
-    return getCategoryDisplayName(category)
-  }
-  
-  return categoryId
+  return category ? getCategoryDisplayName(category) : categoryId
 }
 
 const getProductName = (product: Product | null) => {
@@ -1088,30 +1062,44 @@ const handleProductSaved = () => {
   closeProductForm()
 }
 
+// ========== UPDATED: handleSaveProduct with update logic ==========
 const handleSaveProduct = async (data: {
   productData: any
   brandId?: string
+  productId?: string          // for editing
   createNewBrand?: boolean
   newBrandData?: any
 }) => {
   console.log('📦 Parent received save event:', data)
   
   try {
-    if (editingProduct.value) {
-      // TODO: Implement update product in Firebase
-      console.log('Updating product:', data.productData)
+    if (data.productId && data.brandId) {
+      // --- UPDATE EXISTING PRODUCT ---
+      console.log('✏️ Updating product:', data.productId)
+
+      const productRef = doc(db, 'brands', data.brandId, 'products', data.productId)
+      
+      // Prepare update data (omit fields that should not change)
+      const updateData = {
+        ...data.productData,
+        updatedAt: serverTimestamp()
+        // Do not include createdAt or id
+      }
+
+      await updateDoc(productRef, updateData)
+
+      console.log('✅ Product updated successfully')
       authNotification.loggedIn(t('Product updated successfully'))
+
     } else if (data.createNewBrand) {
-      // Create new brand with product using brandsStore
+      // --- CREATE NEW BRAND WITH PRODUCT ---
       console.log('Creating new brand with product...')
       
-      // Handle brand image - convert to Base64 if exists
       let brandImageBase64 = ''
       if (data.newBrandData.imageFile) {
         brandImageBase64 = await fileToBase64(data.newBrandData.imageFile)
       }
       
-      // Prepare brand data (with Base64 image)
       const brandData = {
         name: data.newBrandData.name,
         slug: data.newBrandData.slug,
@@ -1119,10 +1107,9 @@ const handleSaveProduct = async (data: {
         description: data.newBrandData.description || '',
         signature: data.newBrandData.signature || '',
         isActive: data.newBrandData.isActive !== false,
-        image: brandImageBase64 // Store as Base64 string
+        image: brandImageBase64
       }
       
-      // Handle product image - convert to Base64 if exists
       let productImageBase64 = ''
       if (data.productData.imageFile) {
         productImageBase64 = await fileToBase64(data.productData.imageFile)
@@ -1130,20 +1117,15 @@ const handleSaveProduct = async (data: {
         productImageBase64 = data.productData.imageUrl
       }
       
-      // Prepare product data for the brand (with Base64 image)
       const productForBrand = {
         ...data.productData,
         brand: brandData.name,
         brandSlug: brandData.slug,
-        imageUrl: productImageBase64, // Store as Base64 string
-        imageFile: undefined // Remove File object
+        imageUrl: productImageBase64,
+        imageFile: undefined
       }
       
-      // Use brandsStore to add brand with product
-      const brandId = await brandsStore.addBrandWithProducts(
-        brandData,
-        [productForBrand]
-      )
+      const brandId = await brandsStore.addBrandWithProducts(brandData, [productForBrand])
       
       if (brandId) {
         console.log('✅ Brand and product created successfully:', brandId)
@@ -1151,17 +1133,16 @@ const handleSaveProduct = async (data: {
       } else {
         throw new Error('Failed to create brand')
       }
+
     } else if (data.brandId) {
-      // Add product to existing brand
+      // --- ADD PRODUCT TO EXISTING BRAND ---
       console.log('Adding product to existing brand:', data.brandId)
       
-      // Find the brand
       const brand = brandsStore.brands.find(b => b.id === data.brandId)
       if (!brand) {
         throw new Error('Brand not found')
       }
       
-      // Handle product image - convert to Base64 if exists
       let productImageBase64 = ''
       if (data.productData.imageFile) {
         productImageBase64 = await fileToBase64(data.productData.imageFile)
@@ -1169,24 +1150,22 @@ const handleSaveProduct = async (data: {
         productImageBase64 = data.productData.imageUrl
       }
       
-      // Add product directly to the brand's subcollection
       const batch = writeBatch(db)
       const productsRef = collection(db, 'brands', brand.id, 'products')
       const productDocRef = doc(productsRef)
       
-      // Prepare product data with brand information (with Base64 image)
-      const productData = {
+      const productDataToSave = {
         ...data.productData,
         brand: brand.name,
         brandSlug: brand.slug,
         brandId: brand.id,
-        imageUrl: productImageBase64, // Store as Base64 string
-        imageFile: undefined, // Remove File object
+        imageUrl: productImageBase64,
+        imageFile: undefined,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       }
       
-      batch.set(productDocRef, productData)
+      batch.set(productDocRef, productDataToSave)
       await batch.commit()
       
       console.log('✅ Product added successfully to brand:', brand.id)
@@ -1218,7 +1197,6 @@ const deleteProductLocal = async () => {
 
   deleting.value = true
   try {
-    // Filter out the product from local state
     const index = productsStore.products.findIndex(p => p.id === productToDelete.value!.id)
     if (index !== -1) {
       productsStore.products.splice(index, 1)
@@ -1256,7 +1234,6 @@ onMounted(async () => {
   }
 })
 </script>
-
 <style scoped>
 .luxury-loading-spinner {
   width: 50px;

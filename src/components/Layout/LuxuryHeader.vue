@@ -75,6 +75,18 @@
                 </div>
               </div>
             </li>
+            <!-- NEW: Unisex Link -->
+            <li class="luxury-nav-item">
+              <router-link to="/category/unisex" class="luxury-nav-link" active-class="active">
+                {{ languageStore.t('unisex') }}
+              </router-link>
+              <div class="nav-preview">
+                <div class="preview-content">
+                  <h4 class="preview-title">Unisex Collection</h4>
+                  <p class="preview-description">Fragrances for everyone, transcending boundaries</p>
+                </div>
+              </div>
+            </li>
             <li class="luxury-nav-item">
               <router-link to="/about" class="luxury-nav-link" active-class="active">
                 {{ languageStore.t('about') }}
@@ -280,6 +292,12 @@
               <li class="mobile-nav-item">
                 <router-link to="/category/womens" class="mobile-nav-link" @click="closeMobileMenu">
                   {{ languageStore.t('womens') }}
+                </router-link>
+              </li>
+              <!-- NEW: Unisex Mobile Link -->
+              <li class="mobile-nav-item">
+                <router-link to="/category/unisex" class="mobile-nav-link" @click="closeMobileMenu">
+                  {{ languageStore.t('unisex') }}
                 </router-link>
               </li>
               <li class="mobile-nav-item">

@@ -11,7 +11,6 @@ import {
   orderBy,
   limit,
   startAfter,
-  DocumentSnapshot,
   QueryConstraint,
   QueryDocumentSnapshot,
   startAt,
@@ -206,6 +205,9 @@ export const useProductsStore = defineStore('products', () => {
             originalPrice: Number(data.originalPrice) || Number(data.price) || 0,
             size: data.size || '100ml',
             concentration: data.concentration || 'Eau de Parfum',
+            classification: data.classification || '',
+            // ✅ Include sku field
+            sku: data.sku || '',
             imageUrl: imageUrl,
             images: images,
             isBestSeller: data.isBestSeller || false,
@@ -748,6 +750,11 @@ export const useProductsStore = defineStore('products', () => {
       filtered = filtered.filter(p => p.size === options.size)
     }
 
+    // NEW: Filter by classification (gender)
+    if (options.classification) {
+      filtered = filtered.filter(p => p.classification === options.classification)
+    }
+
     // Apply sorting
     return applySorting(filtered, options.sortBy || selectedSort.value)
   }
@@ -783,7 +790,7 @@ export const useProductsStore = defineStore('products', () => {
 
       // If not enough related products, fetch from the same brand
       if (related.length < limit && product.brandId) {
-        const brandProducts = await getProductsByBrand(product.brandSlug)
+        const brandProducts = await getProductsByBrand(product.brandSlug!)
         const additional = brandProducts
           .filter(p => p.id !== product.id && p.category === product.category)
           .slice(0, limit - related.length)
@@ -943,6 +950,10 @@ export const useProductsStore = defineStore('products', () => {
       originalPrice: Number(data.originalPrice) || Number(data.price) || 0,
       size: data.size || '100ml',
       concentration: data.concentration || 'Eau de Parfum',
+      // NEW: classification field
+      classification: data.classification || '',
+      // ✅ Include sku field
+      sku: data.sku || '',
       imageUrl: imageUrl,
       images: images,
       isBestSeller: data.isBestSeller || false,

@@ -67,6 +67,9 @@ export interface Product {
   size: string
   concentration: string
 
+  // NEW: classification field (gender)
+  classification?: string; // 'M' | 'F' | 'U'
+
   notes: {
     top: string[]
     heart: string[]
@@ -88,6 +91,9 @@ export interface Product {
 
   rating?: number
   reviewCount?: number
+
+  // ✅ Added SKU field (optional for existing products)
+  sku?: string
 
   createdAt?: any
   updatedAt?: any
@@ -112,6 +118,7 @@ export interface ProductFormData {
   originalPrice?: number
   size: string
   concentration: string
+  classification?: string // NEW
   notes: {
     top: string[]
     heart: string[]

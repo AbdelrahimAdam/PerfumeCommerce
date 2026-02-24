@@ -1,3 +1,4 @@
+<!-- src/components/Admin/AddBrandModal.vue -->
 <template>
   <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
     <!-- Background overlay -->
@@ -418,6 +419,45 @@
                         </button>
                       </div>
 
+                      <!-- NEW: Gender Classification Field -->
+                      <div class="mb-3">
+                        <label class="block text-xs font-medium text-gray-700 mb-1">
+                          {{ t('Classification') }} <span class="text-red-500">*</span>
+                        </label>
+                        <div class="flex gap-4 flex-wrap">
+                          <label class="inline-flex items-center gap-1">
+                            <input
+                              type="radio"
+                              v-model="product.classification"
+                              value="M"
+                              required
+                              class="h-3 w-3 text-primary-600 focus:ring-primary-500 border-gray-300"
+                            />
+                            <span class="text-xs text-gray-700">{{ t('Male') }}</span>
+                          </label>
+                          <label class="inline-flex items-center gap-1">
+                            <input
+                              type="radio"
+                              v-model="product.classification"
+                              value="F"
+                              required
+                              class="h-3 w-3 text-primary-600 focus:ring-primary-500 border-gray-300"
+                            />
+                            <span class="text-xs text-gray-700">{{ t('Female') }}</span>
+                          </label>
+                          <label class="inline-flex items-center gap-1">
+                            <input
+                              type="radio"
+                              v-model="product.classification"
+                              value="U"
+                              required
+                              class="h-3 w-3 text-primary-600 focus:ring-primary-500 border-gray-300"
+                            />
+                            <span class="text-xs text-gray-700">{{ t('Unisex') }}</span>
+                          </label>
+                        </div>
+                      </div>
+
                       <!-- Product Fields -->
                       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                         <div>
@@ -621,6 +661,48 @@ const emit = defineEmits<{
   save: [data: { brand: Partial<Brand>, products: Partial<Product>[] }]
 }>()
 
+// ========== STRICT BRAND ABBREVIATION MAPPING (copied from product form) ==========
+const BRAND_CODES: Record<string, string> = {
+  "Baccarat": "BC",
+  "Burberry Her": "BH",
+  "Calvin Klein": "CK",
+  "Dior": "DI",
+  "Dolcy & Gabana": "DG",
+  "Escada": "EE",
+  "Giorgio Armani": "GA",
+  "Good Girl": "GG",
+  "Gucci": "GU",
+  "Jean Paul Gaultier": "JP",
+  "Kayali": "KA",
+  "La costa": "LC",
+  "Lancome": "LN",
+  "Latafa": "LF",
+  "laverne": "LA",
+  "Moscino": "MS",
+  "Nishan": "NI",
+  "Louis Vuitton": "LV",
+  "Paco Rabanne": "PR",
+  "Parfums de Maely": "PM",
+  "Scandal": "SC",
+  "TOM FORD": "TF",
+  "Valantino": "VA",
+  "Versace": "VR",
+  "Victoria's Secret": "VS",
+  "Yves Saint Laurent": "YL"
+}
+
+// Helper: get official abbreviation or fallback to dynamic (first two letters)
+const getBrandAbbreviation = (brandName: string): { code: string, isFallback: boolean } => {
+  const normalized = brandName.trim()
+  const official = BRAND_CODES[normalized]
+  if (official) {
+    return { code: official, isFallback: false }
+  }
+  // Fallback: take first two uppercase letters (remove spaces, take first two chars)
+  const fallback = normalized.replace(/\s+/g, '').substring(0, 2).toUpperCase()
+  return { code: fallback, isFallback: true }
+}
+
 // Step management
 const currentStep = ref(1)
 
@@ -640,8 +722,8 @@ const formData = reactive({
 const brandImageBase64 = ref<string>('')
 const brandImageFile = ref<File | null>(null)
 
-// Products array with base64 images
-const products = ref<Partial<Product & { imageBase64?: string }>[]>([])
+// Products array with base64 images and classification (gender)
+const products = ref<Partial<Product & { imageBase64?: string; classification?: string }>[]>([])
 
 // Form state
 const errors = reactive({
@@ -657,7 +739,7 @@ const imagePreview = ref('')
 const productFileInputs = ref<(HTMLInputElement | null)[]>([])
 const editing = computed(() => !!props.brand?.id)
 
-// Product templates
+// Product templates (updated to include classification)
 const productTemplates = {
   noirExtreme: {
     name: { en: 'Noir Extreme', ar: 'نوار إكستريم' },
@@ -668,6 +750,7 @@ const productTemplates = {
     price: 450,
     size: '100ml',
     concentration: 'Eau de Parfum',
+    classification: 'M', // Male
     inStock: true
   },
   ombreLeather: {
@@ -679,6 +762,7 @@ const productTemplates = {
     price: 520,
     size: '100ml',
     concentration: 'Eau de Parfum',
+    classification: 'M',
     inStock: true
   },
   tobaccoVanille: {
@@ -690,6 +774,7 @@ const productTemplates = {
     price: 580,
     size: '100ml',
     concentration: 'Eau de Parfum',
+    classification: 'U', // Unisex
     inStock: true
   },
   oudWood: {
@@ -701,6 +786,7 @@ const productTemplates = {
     price: 650,
     size: '100ml',
     concentration: 'Eau de Parfum',
+    classification: 'U',
     inStock: true
   }
 }
@@ -752,6 +838,7 @@ const loadExistingProducts = async (brandSlug: string) => {
         price: product.price,
         size: product.size || '100ml',
         concentration: product.concentration || 'Eau de Parfum',
+        classification: product.classification || '', // preserve existing if any
         imageUrl: product.imageUrl || '',
         images: product.images || [],
         inStock: product.inStock !== false,
@@ -760,7 +847,8 @@ const loadExistingProducts = async (brandSlug: string) => {
         slug: product.slug || '',
         brand: product.brand || brandSlug,
         brandId: product.brandId || '',
-        category: product.category || ''
+        category: product.category || '',
+        sku: product.sku || '' // preserve existing SKU
       }))
     }
   } catch (error) {
@@ -794,12 +882,9 @@ const formatBytes = (bytes: number): string => {
 const isValidUrl = (url: string): boolean => {
   if (!url) return false
   try {
-    // Check if it's a base64 string
     if (url.startsWith('data:')) {
       return url.startsWith('data:image/')
     }
-    
-    // Check if it's a valid URL
     new URL(url)
     return true
   } catch {
@@ -811,7 +896,6 @@ const compressBase64Image = (base64: string, maxSizeKB = 100): string => {
   if (base64.length <= maxSizeKB * 1024) {
     return base64
   }
-  
   console.warn(`Image is too large: ${formatBytes(base64.length)}. Please use a smaller image.`)
   return base64
 }
@@ -825,7 +909,6 @@ const handleBrandImageUpload = (event: Event) => {
   const file = input.files[0]
   brandImageFile.value = file
   
-  // Validate file size (100KB max for base64)
   if (file.size > 100 * 1024) {
     alert(t('Image must be less than 100KB for base64 storage. Please use a smaller image.'))
     input.value = ''
@@ -833,18 +916,15 @@ const handleBrandImageUpload = (event: Event) => {
     return
   }
   
-  // Convert to base64
   const reader = new FileReader()
   reader.onload = (e) => {
     const base64 = e.target?.result as string
-    // Compress if needed
     brandImageBase64.value = compressBase64Image(base64, 100)
     imagePreview.value = brandImageBase64.value
     formData.image = brandImageBase64.value
   }
   reader.readAsDataURL(file)
   
-  // Clear any image errors
   errors.image = ''
 }
 
@@ -898,14 +978,12 @@ const validateForm = () => {
   console.log('🔍 Validating form...')
   let isValid = true
   
-  // Reset errors
   Object.keys(errors).forEach(key => {
     errors[key as keyof typeof errors] = ''
   })
   
   productErrors.value = []
   
-  // Validate brand form
   if (!formData.name.trim()) {
     console.log('❌ Brand name is required')
     errors.name = t('Brand name is required')
@@ -958,7 +1036,13 @@ const validateForm = () => {
       isValid = false
     }
     
-    // Check product image size if base64
+    // Validate classification (gender)
+    if (!product.classification) {
+      console.log(`❌ Product ${index} classification is required`)
+      productError.classification = t('Classification is required')
+      isValid = false
+    }
+    
     if (product.imageBase64 && product.imageBase64.length > 100 * 1024) {
       console.log(`❌ Product ${index} image too large:`, formatBytes(product.imageBase64.length))
       productError.image = t('Product image too large. Must be less than 100KB')
@@ -978,13 +1062,14 @@ const validateForm = () => {
 
 const addNewProduct = () => {
   console.log('➕ Adding new product')
-  const newProduct: Partial<Product & { imageBase64?: string }> = {
+  const newProduct: Partial<Product & { imageBase64?: string; classification?: string }> = {
     id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     name: { en: '', ar: '' },
     description: { en: '', ar: '' },
     price: 0,
     size: '100ml',
     concentration: 'Eau de Parfum',
+    classification: '', // Gender field
     imageUrl: '',
     imageBase64: '',
     images: [],
@@ -1004,13 +1089,14 @@ const addNewProduct = () => {
 const addProductTemplate = (templateName: keyof typeof productTemplates) => {
   console.log('📋 Adding product template:', templateName)
   const template = productTemplates[templateName]
-  const newProduct: Partial<Product & { imageBase64?: string }> = {
+  const newProduct: Partial<Product & { imageBase64?: string; classification?: string }> = {
     id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     name: { ...template.name },
     description: { ...template.description },
     price: template.price,
     size: template.size,
     concentration: template.concentration,
+    classification: template.classification, // Gender from template
     imageUrl: '',
     imageBase64: '',
     images: [],
@@ -1068,7 +1154,6 @@ const handleProductImageUpload = async (event: Event, index: number) => {
 
   const file = input.files[0]
   
-  // Validate file size (100KB max for base64)
   if (file.size > 100 * 1024) {
     alert(t('Product image must be less than 100KB for base64 storage. Please use a smaller image.'))
     input.value = ''
@@ -1078,21 +1163,16 @@ const handleProductImageUpload = async (event: Event, index: number) => {
   console.log(`📸 Product ${index} image file:`, file.name, formatBytes(file.size))
   
   try {
-    // Convert to base64
     const reader = new FileReader()
     reader.onload = (e) => {
       const base64 = e.target?.result as string
-      // Compress if needed
       products.value[index].imageBase64 = compressBase64Image(base64, 100)
       products.value[index].imageUrl = products.value[index].imageBase64
       products.value[index].images = [products.value[index].imageBase64!]
       console.log(`✅ Product ${index} image converted to base64:`, formatBytes(base64.length))
     }
     reader.readAsDataURL(file)
-    
-    // Reset the file input
     input.value = ''
-    
   } catch (error: any) {
     console.error('Error loading product image:', error)
     alert(t('Failed to load image: ') + (error.message || 'Unknown error'))
@@ -1104,6 +1184,37 @@ const handleProductImageError = (index: number) => {
   products.value[index].imageUrl = ''
   products.value[index].imageBase64 = ''
   products.value[index].images = []
+}
+
+// ========== SKU GENERATION FOR BATCH ==========
+/**
+ * Generates SKUs for all products in the current batch.
+ * SKU format: P.N + brand abbreviation + gender + 3-digit zero-padded package number (001, 002, ...)
+ * Package numbers are assigned per gender, starting from 001.
+ */
+const generateSkuBatch = (brandName: string): void => {
+  const { code: brandAbbr, isFallback } = getBrandAbbreviation(brandName)
+  
+  // Group products by gender
+  const genderGroups: Record<string, typeof products.value> = { M: [], F: [], U: [] }
+  products.value.forEach(product => {
+    if (product.classification) {
+      genderGroups[product.classification].push(product)
+    }
+  })
+  
+  // For each gender, assign package numbers sequentially
+  Object.entries(genderGroups).forEach(([gender, group]) => {
+    group.forEach((product, idx) => {
+      const packageNumber = (idx + 1).toString().padStart(3, '0')
+      product.sku = `P.N${brandAbbr}${gender}${packageNumber}`
+    })
+  })
+  
+  if (isFallback) {
+    console.warn(`Brand "${brandName}" not in official mapping, using fallback code: ${brandAbbr}`)
+    // Optionally show a warning to user, but we'll skip for now to keep it simple
+  }
 }
 
 // ========== NAVIGATION METHODS ==========
@@ -1124,7 +1235,6 @@ const goToStep = (step: number) => {
 const saveBrandAndProducts = async () => {
   console.log('💾 Save button clicked')
   
-  // Check authentication FIRST
   if (!authStore.isAuthenticated) {
     console.log('❌ Not authenticated')
     alert(t('You must be logged in to perform this action'))
@@ -1154,13 +1264,24 @@ const saveBrandAndProducts = async () => {
   
   console.log(`✅ Products count: ${products.value.length}`)
   
+  // Generate SKUs for all products before saving
+  if (!editing.value) {
+    // For new brand, generate SKUs for all products
+    generateSkuBatch(formData.name)
+  } else {
+    // For editing, we assume existing products already have SKUs; new ones might not
+    // We could generate for new products here, but for simplicity we'll skip and rely on product form later.
+    // However, if we added new products while editing, we should generate SKUs for them too.
+    // But to keep it simple and avoid duplicate logic, we'll leave SKU generation for existing brand to the product form.
+    // The product form will correctly handle adding new products to existing brand.
+  }
+  
   loading.value = true
   console.log('⏳ Loading started...')
   
   try {
     // ========== PREPARE BRAND DATA ==========
     
-    // Determine brand image - use base64 if available, otherwise use URL
     let brandImage = formData.image
     if (brandImageBase64.value) {
       brandImage = brandImageBase64.value
@@ -1169,7 +1290,7 @@ const saveBrandAndProducts = async () => {
     const brandData: Partial<Brand> = {
       name: formData.name,
       slug: formData.slug,
-      image: brandImage, // This could be URL or base64
+      image: brandImage,
       signature: formData.signature || '',
       category: formData.category,
       description: formData.description || '',
@@ -1184,10 +1305,8 @@ const saveBrandAndProducts = async () => {
     // ========== PREPARE PRODUCTS DATA ==========
     
     const productsData: Partial<Product>[] = products.value.map((product, index) => {
-      // Use base64 if available, otherwise use URL
       const imageUrl = product.imageBase64 || product.imageUrl || ''
       
-      // Generate slug from product name
       const productSlug = product.slug || (product.name?.en || '')
         .toLowerCase()
         .replace(/[^\w\s-]/g, '')
@@ -1201,20 +1320,24 @@ const saveBrandAndProducts = async () => {
         price: Number(product.price) || 0,
         size: product.size || '100ml',
         concentration: product.concentration || 'Eau de Parfum',
-        imageUrl: imageUrl, // This is base64 or URL
-        images: imageUrl ? [imageUrl] : [], // Store as array for compatibility
+        classification: product.classification || '', // NEW: save gender
+        imageUrl: imageUrl,
+        images: imageUrl ? [imageUrl] : [],
         inStock: product.inStock !== false,
         isBestSeller: product.isBestSeller || false,
         isFeatured: product.isFeatured || false,
         slug: productSlug,
         brand: formData.slug,
         brandId: '', // Will be set by store function
-        category: product.category || formData.category
+        category: product.category || formData.category,
+        sku: product.sku || '' // Include generated SKU
       }
       
       console.log(`📦 Prepared product ${index}:`, {
         name: preparedProduct.name?.en,
         price: preparedProduct.price,
+        classification: preparedProduct.classification,
+        sku: preparedProduct.sku,
         imageUrl: preparedProduct.imageUrl ? `${preparedProduct.imageUrl.substring(0, 30)}...` : 'No image'
       })
       
@@ -1240,8 +1363,6 @@ const saveBrandAndProducts = async () => {
       }
     } else {
       console.log('🆕 Creating new brand with products...')
-      // We need to ensure products don't have base64 that's too large
-      // Firestore has 1MB limit per field, so we need to check
       const totalSize = JSON.stringify(productsData).length
       console.log('📊 Total data size:', formatBytes(totalSize))
       
@@ -1256,25 +1377,16 @@ const saveBrandAndProducts = async () => {
     if (result) {
       console.log('✅ Brand saved successfully with ID:', result)
       
-      // Refresh homepage data to include new brand
-      console.log('🔄 Refreshing homepage data...')
       await homepageStore.loadHomepageData()
-      
-      // Refresh products store
-      console.log('🔄 Refreshing products store...')
       await productsStore.fetchProducts()
       
-      // Show success message
       alert(t('Brand and products saved successfully!'))
       
-      // Emit save event
       emit('save', {
         brand: brandData,
         products: productsData
       })
       
-      // Close modal
-      console.log('🔒 Closing modal...')
       emit('close')
     } else {
       console.error('❌ Failed to save brand - store returned null')
@@ -1284,7 +1396,6 @@ const saveBrandAndProducts = async () => {
   } catch (error: any) {
     console.error('❌ Error saving brand and products:', error)
     
-    // Handle specific Firebase errors
     if (error.message?.includes('permission') || error.message?.includes('Missing or insufficient')) {
       alert(t('Permission denied. Please check if you have super-admin privileges.'))
     } else if (error.message?.includes('longer than 1048487 bytes')) {

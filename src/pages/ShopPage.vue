@@ -193,6 +193,59 @@
               </div>
             </div>
 
+            <!-- NEW: Gender Filter Section -->
+            <div class="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+              <h3 class="font-medium text-gray-900 mb-3">
+                {{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}
+              </h3>
+              <div class="space-y-1">
+                <button
+                  @click="updateFilter('classification', undefined)"
+                  :class="[
+                    'w-full text-left px-3 py-2 rounded transition-all duration-200 text-sm',
+                    !filters.classification
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                  ]"
+                >
+                  {{ currentLanguage === 'en' ? 'All' : 'الكل' }}
+                </button>
+                <button
+                  @click="updateFilter('classification', 'M')"
+                  :class="[
+                    'w-full text-left px-3 py-2 rounded transition-all duration-200 text-sm',
+                    filters.classification === 'M'
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                  ]"
+                >
+                  {{ currentLanguage === 'en' ? 'Men' : 'رجال' }}
+                </button>
+                <button
+                  @click="updateFilter('classification', 'F')"
+                  :class="[
+                    'w-full text-left px-3 py-2 rounded transition-all duration-200 text-sm',
+                    filters.classification === 'F'
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                  ]"
+                >
+                  {{ currentLanguage === 'en' ? 'Women' : 'نساء' }}
+                </button>
+                <button
+                  @click="updateFilter('classification', 'U')"
+                  :class="[
+                    'w-full text-left px-3 py-2 rounded transition-all duration-200 text-sm',
+                    filters.classification === 'U'
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                  ]"
+                >
+                  {{ currentLanguage === 'en' ? 'Unisex' : 'للجنسين' }}
+                </button>
+              </div>
+            </div>
+
             <!-- Price Range -->
             <div class="bg-white rounded-lg border border-gray-200 p-4 mb-4">
               <h3 class="font-medium text-gray-900 mb-3">
@@ -455,7 +508,7 @@ const searchTimeout = ref<NodeJS.Timeout>()
 const filters = ref<FilterOptions>({
   sortBy: 'newest'
 })
-const visibleCount = ref(12)
+const visibleCount = ref(24) // Increased from 12 to 24 to show more products initially
 const isInitialLoad = ref(true)
 
 // Price ranges in EGP
@@ -510,6 +563,18 @@ const activeFilters = computed(() => {
     }
   }
   
+  if (filters.value.classification) {
+    const genderMap: Record<string, string> = {
+      M: currentLanguage === 'en' ? 'Men' : 'رجال',
+      F: currentLanguage === 'en' ? 'Women' : 'نساء',
+      U: currentLanguage === 'en' ? 'Unisex' : 'للجنسين'
+    }
+    active.push({ 
+      label: `${currentLanguage === 'en' ? 'Gender' : 'الجنس'}: ${genderMap[filters.value.classification] || filters.value.classification}`, 
+      value: filters.value.classification 
+    })
+  }
+  
   if (filters.value.minPrice !== undefined || filters.value.maxPrice !== undefined) {
     const min = filters.value.minPrice ?? 0
     const max = filters.value.maxPrice ?? Infinity
@@ -562,7 +627,7 @@ const updateFilter = (key: keyof FilterOptions, value: any) => {
   } else {
     filters.value[key] = value
   }
-  visibleCount.value = 12 // Reset to first page
+  visibleCount.value = 24 // Reset to first page (now 24)
   
   // Close mobile filters after selection
   if (window.innerWidth < 1024) {
@@ -584,7 +649,7 @@ const updatePriceRange = (range: { min?: number, max?: number }) => {
     // Clear luxury filter if using price range
     delete filters.value.price
   }
-  visibleCount.value = 12
+  visibleCount.value = 24
   
   // Close mobile filters after selection
   if (window.innerWidth < 1024) {
@@ -602,7 +667,7 @@ const isPriceRangeSelected = (range: typeof priceRanges[0]) => {
 }
 
 const handleSortChange = () => {
-  visibleCount.value = 12
+  visibleCount.value = 24
   productsStore.setFilters({ ...filters.value })
 }
 
@@ -611,7 +676,7 @@ const clearFilters = () => {
   const sortBy = filters.value.sortBy || 'newest'
   filters.value = { sortBy }
   searchQuery.value = ''
-  visibleCount.value = 12
+  visibleCount.value = 24
   productsStore.resetFilters()
   productsStore.setFilters({ sortBy })
   
@@ -621,7 +686,7 @@ const clearFilters = () => {
 
 const clearSearch = () => {
   searchQuery.value = ''
-  visibleCount.value = 12
+  visibleCount.value = 24
 }
 
 const handleSearch = () => {
@@ -632,7 +697,7 @@ const handleSearch = () => {
   
   // Set new timeout for debouncing
   searchTimeout.value = setTimeout(() => {
-    visibleCount.value = 12
+    visibleCount.value = 24
   }, 300)
 }
 
@@ -742,7 +807,7 @@ onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
   
   // Reset component state
-  visibleCount.value = 12
+  visibleCount.value = 24
   isInitialLoad.value = true
   showMobileFilters.value = false
 })
@@ -832,7 +897,7 @@ input:focus {
   padding-right: 3rem;
 }
 
-[dir="rtl"] .absolute.left-4 {
+[dir="rtl"] .absolute.left-4 {   
   left: auto;
   right: 1rem;
 }

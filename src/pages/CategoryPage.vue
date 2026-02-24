@@ -153,12 +153,35 @@ const filters = ref<FilterOptions>({})
 const categorySlug = computed(() => route.params.slug as string)
 const imageError = ref(false)
 
+// Gender slugs mapping
+const GENDER_SLUGS = ['women', 'men', 'unisex', 'womens', 'mens', 'woman', 'man']
+const GENDER_MAP: Record<string, string> = {
+  'women': 'F',
+  'womens': 'F',
+  'woman': 'F',
+  'men': 'M',
+  'mens': 'M',
+  'man': 'M',
+  'unisex': 'U'
+}
+
 // Computed properties
 const currentCategory = computed(() => {
   return categories.find(c => c.id === categorySlug.value)
 })
 
 const categoryName = computed(() => {
+  if (isGenderSlug.value) {
+    if (categorySlug.value.startsWith('women') || categorySlug.value === 'woman') {
+      return t('Women')
+    }
+    if (categorySlug.value.startsWith('men') || categorySlug.value === 'man') {
+      return t('Men')
+    }
+    if (categorySlug.value === 'unisex') {
+      return t('Unisex')
+    }
+  }
   return currentCategory.value?.[currentLanguage.value] || categorySlug.value
 })
 
@@ -167,24 +190,23 @@ const categoryDescription = computed(() => {
 })
 
 const categoryImage = computed(() => {
-  // Reset image error when category changes
   imageError.value = false
-  
   const slug = categorySlug.value.toLowerCase()
-  
-  // Return specific images for women and men collections
   if (slug === 'women' || slug === 'womens' || slug === 'woman') {
     return '/images/women-collection.jpg'
   } else if (slug === 'men' || slug === 'mens' || slug === 'man') {
     return '/images/men-collection.jpg'
   }
-  
-  // Return default category image for other categories
   return currentCategory.value?.image || '/images/default-category.jpg'
 })
 
 const categoryTitle = computed(() => {
   return `${categoryName.value} | ${t('Luxury Perfumes')}`
+})
+
+const isGenderSlug = computed(() => {
+  const slug = categorySlug.value.toLowerCase()
+  return GENDER_SLUGS.includes(slug)
 })
 
 // Format price in Egyptian Pound
@@ -202,31 +224,43 @@ const processedProducts = computed(() => {
   return products.map(product => ({
     ...product,
     formattedPrice: formatPrice(product.price),
-    // If you have a sale price, format that too
     formattedSalePrice: product.salePrice ? formatPrice(product.salePrice) : null
   }))
 })
 
+// 🔁 CORRECTED FILTER LOGIC
 const filteredProducts = computed(() => {
+  // Start with all products (processed)
   let filtered = processedProducts.value
-  
-  // Apply category filter
-  if (categorySlug.value && categorySlug.value !== 'best-sellers' && categorySlug.value !== 'new-arrivals') {
-    filtered = filtered.filter(p => p.category === categorySlug.value)
-  }
-  
-  // Apply other filters
+
+  // Apply store filters (search, brand, price, etc.)
   filtered = filterProducts(filters.value)
-  
+
+  // Now apply category/gender specific filter
+  if (categorySlug.value && categorySlug.value !== 'best-sellers' && categorySlug.value !== 'new-arrivals') {
+    if (isGenderSlug.value) {
+      const classification = GENDER_MAP[categorySlug.value.toLowerCase()]
+      if (classification) {
+        filtered = filtered.filter(p => p.classification === classification)
+      }
+    } else {
+      // Regular category filter
+      filtered = filtered.filter(p => p.category === categorySlug.value)
+    }
+  }
+
   // Special categories
   if (categorySlug.value === 'best-sellers') {
     filtered = filtered.filter(p => p.isBestSeller)
   } else if (categorySlug.value === 'new-arrivals') {
     const oneMonthAgo = new Date()
     oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
-    filtered = filtered.filter(p => p.createdAt?.toDate() > oneMonthAgo)
+    filtered = filtered.filter(p => {
+      const date = p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.createdAt?.seconds * 1000)
+      return date > oneMonthAgo
+    })
   }
-  
+
   return filtered
 })
 
@@ -258,7 +292,6 @@ watch(
   async (newSlug) => {
     if (newSlug) {
       await productsStore.fetchProducts()
-      // Reset filters except category
       filters.value = {}
     }
   },

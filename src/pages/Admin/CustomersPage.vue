@@ -463,11 +463,37 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLanguageStore } from '@/stores/language'
-import { collection, getDocs, query, orderBy, limit, startAfter, doc, deleteDoc, updateDoc, where } from 'firebase/firestore'
+import { collection, getDocs, query, orderBy, limit, startAfter, doc, deleteDoc } from 'firebase/firestore'
 import { db } from '@/firebase/config'
-import { authNotification } from '@/utils/notifications'
 import { showConfirmation } from '@/utils/confirmation'
 import debounce from 'lodash/debounce'
+
+// Safe notification function (since authNotification seems to be problematic)
+const showNotification = (message: string, type: 'info' | 'success' | 'error' | 'warning' = 'info') => {
+  // Try to use authNotification if available
+  try {
+    // Dynamic import or check if authNotification exists
+    import('@/utils/notifications').then(module => {
+      const authNotification = module.authNotification
+      if (authNotification && typeof authNotification[type] === 'function') {
+        authNotification[type](message)
+      } else {
+        // Fallback to console
+        console.log(`[${type.toUpperCase()}] ${message}`)
+        // You could also use a different notification system here
+        alert(message)
+      }
+    }).catch(() => {
+      // Fallback if module doesn't exist
+      console.log(`[${type.toUpperCase()}] ${message}`)
+      // alert(message)
+    })
+  } catch (error) {
+    // Ultimate fallback
+    console.log(`[${type.toUpperCase()}] ${message}`)
+    // alert(message)
+  }
+}
 
 const router = useRouter()
 const languageStore = useLanguageStore()
@@ -682,7 +708,7 @@ const loadCustomers = async () => {
   } catch (err: any) {
     console.error('Error loading customers:', err)
     error.value = err.message || 'Failed to load customers'
-    authNotification.error(error.value)
+    showNotification(error.value, 'error')
   } finally {
     loading.value = false
   }
@@ -802,7 +828,7 @@ const viewAllOrders = (customer: any) => {
 const editCustomer = (customer: any) => {
   // Implement edit functionality
   console.log('Edit customer:', customer)
-  authNotification.info('Edit functionality coming soon')
+  showNotification('Edit functionality coming soon', 'info')
 }
 
 const deleteCustomer = async (id: string) => {
@@ -819,10 +845,10 @@ const deleteCustomer = async (id: string) => {
       await deleteDoc(doc(db, 'customers', id))
       customers.value = customers.value.filter(c => c.id !== id)
       selectedCustomers.value = selectedCustomers.value.filter(cId => cId !== id)
-      authNotification.loggedIn(t('Customer deleted successfully'))
+      showNotification(t('Customer deleted successfully'), 'success')
     } catch (err) {
       console.error('Error deleting customer:', err)
-      authNotification.error(t('Failed to delete customer'))
+      showNotification(t('Failed to delete customer'), 'error')
     }
   }
 }
@@ -857,10 +883,10 @@ const exportCustomers = () => {
     link.click()
     URL.revokeObjectURL(url)
     
-    authNotification.loggedIn(t('Customers exported successfully'))
+    showNotification(t('Customers exported successfully'), 'success')
   } catch (err) {
     console.error('Error exporting customers:', err)
-    authNotification.error(t('Failed to export customers'))
+    showNotification(t('Failed to export customers'), 'error')
   }
 }
 
