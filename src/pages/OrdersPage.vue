@@ -468,7 +468,6 @@ const trackGuestOrder = async () => {
 // Search with debounce
 const handleSearch = debounce(() => {
   if (searchQuery.value.length >= 2 || searchQuery.value.length === 0) {
-    ordersStore.clearOrders()
     const userId = getCurrentUserId.value
     if (userId) {
       ordersStore.fetchOrders({ 
@@ -482,9 +481,10 @@ const handleSearch = debounce(() => {
 // Watch for tab changes
 watch(activeTab, () => {
   currentPage.value = 1
-  ordersStore.clearOrders()
   const userId = getCurrentUserId.value
   if (userId) {
+    // Clear the store before fetching to avoid displaying old data (though fetch replaces it)
+    ordersStore.clearOrders()
     ordersStore.fetchOrders({ 
       userId,
       status: activeTab.value !== 'all' ? activeTab.value as any : undefined
@@ -492,14 +492,39 @@ watch(activeTab, () => {
   }
 })
 
-// Watch for order type changes
+// Watch for order type changes – load customer orders when switching from guest to customer
 watch(orderType, (newType) => {
   if (newType === 'guest') {
-    // Clear any previous guest order
     guestOrder.value = null
     guestOrderError.value = ''
+  } else if (newType === 'customer' && authStore.isCustomer) {
+    const userId = getCurrentUserId.value
+    if (userId) {
+      ordersStore.clearOrders()
+      ordersStore.fetchOrders({ 
+        userId,
+        status: activeTab.value !== 'all' ? activeTab.value as any : undefined
+      })
+    }
   }
 })
+
+// Watch for authentication changes (e.g., after login)
+watch(
+  () => authStore.isCustomer,
+  (isCustomer) => {
+    if (isCustomer && orderType.value === 'customer') {
+      const userId = getCurrentUserId.value
+      if (userId) {
+        ordersStore.clearOrders()
+        ordersStore.fetchOrders({ 
+          userId,
+          status: activeTab.value !== 'all' ? activeTab.value as any : undefined
+        })
+      }
+    }
+  }
+)
 
 // Check for guest order in localStorage on mount
 onMounted(async () => {
@@ -511,7 +536,6 @@ onMounted(async () => {
     // Auto-fill the guest form
     guestOrderForm.email = guestEmail
     
-    // Optionally, you could auto-fetch the last order
     const lastOrderNumber = localStorage.getItem('last_order_number')
     if (lastOrderNumber) {
       guestOrderForm.orderNumber = lastOrderNumber

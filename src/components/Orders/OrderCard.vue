@@ -17,7 +17,7 @@
             'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium',
             getStatusColor(order.status)
           ]">
-            {{ getStatusText(order.status) }}
+            {{ ordersStore.getStatusText(order.status) }}
           </span>
           <span class="text-sm font-medium text-gray-900">
             {{ formatCurrency(order.total) }} EGP
@@ -85,7 +85,7 @@
         
         <button
           v-if="order.status === 'delivered'"
-          @click="$emit('reorder', order)"
+          @click="handleReorder"
           class="inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gold-500 hover:bg-gold-600 transition-colors"
         >
           <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -97,7 +97,7 @@
         
         <button
           v-if="order.status === 'pending' || order.status === 'processing'"
-          @click="$emit('cancel', order)"
+          @click="handleCancel"
           class="inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors"
         >
           <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,7 +108,7 @@
         </button>
 
         <button
-          @click="$emit('download-invoice', order.id)"
+          @click="handleDownloadInvoice"
           class="inline-flex items-center p-2 text-gray-500 hover:text-gold-500 transition-colors"
           :title="t('Download Invoice')"
         >
@@ -123,6 +123,9 @@
 
 <script setup lang="ts">
 import { useLanguageStore } from '@/stores/language'
+import { useOrdersStore } from '@/stores/orders'
+import { authNotification } from '@/utils/notifications'
+import { showConfirmation } from '@/utils/confirmation'
 
 const props = defineProps<{
   order: any
@@ -136,6 +139,7 @@ const emit = defineEmits<{
 }>()
 
 const languageStore = useLanguageStore()
+const ordersStore = useOrdersStore()
 const { t } = languageStore
 
 const formatDate = (date: Date) => {
@@ -161,19 +165,45 @@ const getStatusColor = (status: string) => {
   return colors[status] || 'bg-gray-100 text-gray-800'
 }
 
-const getStatusText = (status: string) => {
-  const texts: Record<string, string> = {
-    pending: t('Pending'),
-    processing: t('Processing'),
-    shipped: t('Shipped'),
-    delivered: t('Delivered'),
-    cancelled: t('Cancelled')
-  }
-  return texts[status] || status
-}
-
 const handleImageError = (e: Event) => {
   const img = e.target as HTMLImageElement
   img.src = '/images/default-product.jpg'
+}
+
+const handleReorder = async () => {
+  const confirmed = await showConfirmation({
+    title: t('Reorder Items'),
+    message: t('This will add all items from this order to your cart. Continue?'),
+    confirmText: t('Yes, Reorder'),
+    cancelText: t('Cancel'),
+    type: 'info'
+  })
+  if (confirmed) {
+    const success = await ordersStore.reorder(props.order.id)
+    if (success) {
+      emit('reorder', props.order)
+    }
+  }
+}
+
+const handleCancel = async () => {
+  const confirmed = await showConfirmation({
+    title: t('Cancel Order'),
+    message: t('Are you sure you want to cancel this order? This action cannot be undone.'),
+    confirmText: t('Yes, Cancel'),
+    cancelText: t('No, Keep'),
+    type: 'warning'
+  })
+  if (confirmed) {
+    const success = await ordersStore.cancelOrder(props.order.id)
+    if (success) {
+      emit('cancel', props.order)
+      authNotification.loggedIn(t('Order cancelled successfully'))
+    }
+  }
+}
+
+const handleDownloadInvoice = () => {
+  emit('download-invoice', props.order.id)
 }
 </script>

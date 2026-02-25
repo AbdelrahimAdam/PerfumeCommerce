@@ -2,7 +2,7 @@
 <template>
   <div class="admin-order-details-page">
     <!-- Admin Access Check -->
-    <div v-if="!authStore.isAdmin" class="text-center py-12">
+    <div v-if="!authStore.isAdmin" class="text-center py-12 px-4">
       <div class="bg-red-50 border border-red-200 rounded-lg p-8 max-w-md mx-auto">
         <svg class="mx-auto h-12 w-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
@@ -11,7 +11,7 @@
         <p class="mt-2 text-gray-500">{{ t('You need admin privileges to view this page') }}</p>
         <button
           @click="router.push('/admin/login')"
-          class="mt-6 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gold-500 hover:bg-gold-600"
+          class="mt-6 inline-flex items-center px-6 py-3 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gold-500 hover:bg-gold-600"
         >
           {{ t('Go to Admin Login') }}
         </button>
@@ -20,8 +20,8 @@
 
     <!-- Header - Only show for admins -->
     <template v-else>
-      <div class="mb-8">
-        <div class="flex items-center justify-between">
+      <div class="mb-6 sm:mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div class="flex items-center space-x-4">
             <button
               @click="goBack"
@@ -33,7 +33,7 @@
               </svg>
             </button>
             <div>
-              <h1 class="text-2xl font-bold text-gray-900">{{ t('Order Details') }}</h1>
+              <h1 class="text-xl sm:text-2xl font-bold text-gray-900">{{ t('Order Details') }}</h1>
               <p class="text-sm text-gray-500 mt-1">{{ t('Order Number') }}: #{{ order?.orderNumber }}</p>
             </div>
           </div>
@@ -42,7 +42,7 @@
               'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium',
               getStatusColor(order?.status)
             ]">
-              {{ getStatusText(order?.status) }}
+              {{ ordersStore.getStatusText(order?.status) }}
             </span>
           </div>
         </div>
@@ -64,13 +64,13 @@
         <div class="mt-6 space-x-4">
           <button
             @click="fetchOrder"
-            class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gold-500 hover:bg-gold-600"
+            class="inline-flex items-center px-6 py-3 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gold-500 hover:bg-gold-600"
           >
             {{ t('Try Again') }}
           </button>
           <button
             @click="goBack"
-            class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            class="inline-flex items-center px-6 py-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
             {{ t('Back to Orders') }}
           </button>
@@ -79,13 +79,53 @@
 
       <!-- Order Details -->
       <div v-else-if="order" class="space-y-6">
+        <!-- Status Timeline -->
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+          <div class="px-4 sm:px-6 py-4 bg-gray-50 border-b border-gray-200">
+            <h2 class="text-lg font-medium text-gray-900">{{ t('Order Timeline') }}</h2>
+          </div>
+          <div class="p-4 sm:p-6">
+            <div class="flow-root">
+              <ul class="-mb-8">
+                <li v-for="(statusItem, index) in order.statusHistory" :key="index" class="relative pb-8">
+                  <div v-if="index !== order.statusHistory.length - 1" class="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200" aria-hidden="true"></div>
+                  <div class="relative flex space-x-3">
+                    <div>
+                      <span :class="[
+                        'h-8 w-8 rounded-full flex items-center justify-center ring-8 ring-white',
+                        getTimelineIconColor(statusItem.status)
+                      ]">
+                        <svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                      </span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div>
+                        <p class="text-sm text-gray-900">
+                          {{ ordersStore.getStatusText(statusItem.status) }}
+                          <span v-if="statusItem.note" class="text-gray-500"> - {{ statusItem.note }}</span>
+                        </p>
+                        <p class="mt-0.5 text-xs text-gray-500">
+                          {{ formatDate(statusItem.timestamp) }}
+                          <span v-if="statusItem.updatedBy" class="ml-2">by {{ statusItem.updatedBy }}</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
         <!-- Customer Information -->
         <div class="bg-white rounded-lg shadow overflow-hidden">
-          <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+          <div class="px-4 sm:px-6 py-4 bg-gray-50 border-b border-gray-200">
             <h2 class="text-lg font-medium text-gray-900">{{ t('Customer Information') }}</h2>
           </div>
-          <div class="p-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="p-4 sm:p-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
                 <h3 class="text-sm font-medium text-gray-700 mb-3">{{ t('Contact Details') }}</h3>
                 <div class="space-y-2 text-sm text-gray-600">
@@ -120,70 +160,93 @@
 
         <!-- Order Items -->
         <div class="bg-white rounded-lg shadow overflow-hidden">
-          <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+          <div class="px-4 sm:px-6 py-4 bg-gray-50 border-b border-gray-200">
             <h2 class="text-lg font-medium text-gray-900">{{ t('Order Items') }}</h2>
           </div>
           <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {{ t('Product') }}
-                  </th>
-                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {{ t('Details') }}
-                  </th>
-                  <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {{ t('Price') }}
-                  </th>
-                  <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {{ t('Quantity') }}
-                  </th>
-                  <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {{ t('Total') }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="bg-white divide-y divide-gray-200">
-                <tr v-for="item in order.items" :key="item.id">
-                  <td class="px-6 py-4 whitespace-nowrap">
-                    <div class="flex items-center">
-                      <div class="flex-shrink-0 h-12 w-12 bg-gray-100 rounded overflow-hidden">
-                        <img :src="item.image || '/images/default-product.jpg'" :alt="item.name" class="h-full w-full object-cover">
-                      </div>
-                      <div class="ml-4">
-                        <div class="text-sm font-medium text-gray-900">{{ item.name }}</div>
-                        <div class="text-sm text-gray-500">{{ item.brand }}</div>
-                      </div>
+            <!-- Mobile View -->
+            <div class="sm:hidden divide-y divide-gray-200">
+              <div v-for="item in order.items" :key="item.id" class="p-4">
+                <div class="flex items-start space-x-4">
+                  <div class="flex-shrink-0 w-16 h-16 bg-gray-100 rounded overflow-hidden">
+                    <img :src="item.image || '/images/default-product.jpg'" :alt="item.name" class="h-full w-full object-cover">
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <h3 class="text-sm font-medium text-gray-900">{{ item.name }}</h3>
+                    <p class="text-xs text-gray-500 mt-1">{{ item.size }} • {{ item.concentration }}</p>
+                    <p class="text-xs text-gray-500">{{ item.brand }}</p>
+                    <div class="mt-2 flex justify-between items-center">
+                      <span class="text-sm text-gray-900">{{ formatCurrency(item.price) }} EGP × {{ item.quantity }}</span>
+                      <span class="text-sm font-medium text-gray-900">{{ formatCurrency(item.price * item.quantity) }} EGP</span>
                     </div>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap">
-                    <div class="text-sm text-gray-900">{{ item.size }}</div>
-                    <div class="text-sm text-gray-500">{{ item.concentration }}</div>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                    {{ formatCurrency(item.price) }} EGP
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
-                    {{ item.quantity }}
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-gray-900">
-                    {{ formatCurrency(item.price * item.quantity) }} EGP
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Desktop View -->
+            <div class="hidden sm:block">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      {{ t('Product') }}
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      {{ t('Details') }}
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      {{ t('Price') }}
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      {{ t('Quantity') }}
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      {{ t('Total') }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <tr v-for="item in order.items" :key="item.id">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <div class="flex items-center">
+                        <div class="flex-shrink-0 h-12 w-12 bg-gray-100 rounded overflow-hidden">
+                          <img :src="item.image || '/images/default-product.jpg'" :alt="item.name" class="h-full w-full object-cover">
+                        </div>
+                        <div class="ml-4">
+                          <div class="text-sm font-medium text-gray-900">{{ item.name }}</div>
+                          <div class="text-sm text-gray-500">{{ item.brand }}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <div class="text-sm text-gray-900">{{ item.size }}</div>
+                      <div class="text-sm text-gray-500">{{ item.concentration }}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
+                      {{ formatCurrency(item.price) }} EGP
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
+                      {{ item.quantity }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-gray-900">
+                      {{ formatCurrency(item.price * item.quantity) }} EGP
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
         <!-- Order Summary -->
         <div class="bg-white rounded-lg shadow overflow-hidden">
-          <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+          <div class="px-4 sm:px-6 py-4 bg-gray-50 border-b border-gray-200">
             <h2 class="text-lg font-medium text-gray-900">{{ t('Order Summary') }}</h2>
           </div>
-          <div class="p-6">
+          <div class="p-4 sm:p-6">
             <div class="flex justify-end">
-              <div class="w-full md:w-80 space-y-3">
+              <div class="w-full sm:w-80 space-y-3">
                 <div class="flex justify-between text-sm">
                   <span class="text-gray-600">{{ t('Subtotal') }}</span>
                   <span class="font-medium text-gray-900">{{ formatCurrency(order.subtotal) }} EGP</span>
@@ -207,27 +270,36 @@
 
         <!-- Payment Information -->
         <div class="bg-white rounded-lg shadow overflow-hidden">
-          <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+          <div class="px-4 sm:px-6 py-4 bg-gray-50 border-b border-gray-200">
             <h2 class="text-lg font-medium text-gray-900">{{ t('Payment Information') }}</h2>
           </div>
-          <div class="p-6">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="p-4 sm:p-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               <div>
                 <h3 class="text-sm font-medium text-gray-700 mb-2">{{ t('Payment Method') }}</h3>
                 <p class="text-sm text-gray-900">{{ getPaymentMethodText(order.paymentMethod) }}</p>
               </div>
               <div>
                 <h3 class="text-sm font-medium text-gray-700 mb-2">{{ t('Payment Status') }}</h3>
-                <span :class="[
-                  'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
-                  order.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                ]">
-                  {{ t(order.paymentStatus || 'pending') }}
-                </span>
+                <div class="flex items-center gap-3">
+                  <span :class="getPaymentStatusClasses(order.paymentStatus)" class="px-2 py-1 text-xs rounded-full">
+                    {{ ordersStore.getPaymentStatusText(order.paymentStatus) }}
+                  </span>
+                  <button
+                    @click="showPaymentStatusModal = true"
+                    class="text-xs text-gold-600 hover:text-gold-700"
+                  >
+                    {{ t('Update') }}
+                  </button>
+                </div>
               </div>
               <div>
                 <h3 class="text-sm font-medium text-gray-700 mb-2">{{ t('Order Date') }}</h3>
                 <p class="text-sm text-gray-900">{{ formatDate(order.createdAt) }}</p>
+              </div>
+              <div v-if="order.trackingNumber">
+                <h3 class="text-sm font-medium text-gray-700 mb-2">{{ t('Tracking Number') }}</h3>
+                <p class="text-sm text-gray-900">{{ order.trackingNumber }}</p>
               </div>
             </div>
           </div>
@@ -235,19 +307,19 @@
 
         <!-- Status Update Form -->
         <div class="bg-white rounded-lg shadow overflow-hidden">
-          <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+          <div class="px-4 sm:px-6 py-4 bg-gray-50 border-b border-gray-200">
             <h2 class="text-lg font-medium text-gray-900">{{ t('Update Order Status') }}</h2>
           </div>
-          <div class="p-6">
+          <div class="p-4 sm:p-6">
             <form @submit.prevent="updateOrderStatus" class="space-y-4">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-2">
                     {{ t('Status') }}
                   </label>
                   <select
                     v-model="statusForm.status"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-500"
+                    class="w-full px-4 py-3 sm:py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-500 text-base"
                   >
                     <option value="pending">{{ t('Pending') }}</option>
                     <option value="processing">{{ t('Processing') }}</option>
@@ -263,23 +335,34 @@
                   <input
                     v-model="statusForm.trackingNumber"
                     type="text"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-500"
+                    class="w-full px-4 py-3 sm:py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-500 text-base"
                     :placeholder="t('Enter tracking number')"
                   />
                 </div>
               </div>
-              <div class="flex justify-end space-x-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                  {{ t('Status Note (Optional)') }}
+                </label>
+                <textarea
+                  v-model="statusForm.note"
+                  rows="2"
+                  class="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-500 text-base"
+                  :placeholder="t('Add a note about this status update...')"
+                ></textarea>
+              </div>
+              <div class="flex flex-col sm:flex-row justify-end gap-3">
                 <button
                   type="button"
                   @click="resetStatusForm"
-                  class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  class="w-full sm:w-auto px-6 py-3 sm:py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   {{ t('Reset') }}
                 </button>
                 <button
                   type="submit"
                   :disabled="updating"
-                  class="px-4 py-2 bg-gold-500 text-white rounded-md text-sm font-medium hover:bg-gold-600 disabled:opacity-50"
+                  class="w-full sm:w-auto px-6 py-3 sm:py-2 bg-gold-500 text-white rounded-md text-sm font-medium hover:bg-gold-600 disabled:opacity-50"
                 >
                   {{ updating ? t('Updating...') : t('Update Status') }}
                 </button>
@@ -290,21 +373,21 @@
 
         <!-- Admin Notes -->
         <div class="bg-white rounded-lg shadow overflow-hidden">
-          <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+          <div class="px-4 sm:px-6 py-4 bg-gray-50 border-b border-gray-200">
             <h2 class="text-lg font-medium text-gray-900">{{ t('Admin Notes') }}</h2>
           </div>
-          <div class="p-6">
+          <div class="p-4 sm:p-6">
             <textarea
               v-model="adminNotes"
               rows="4"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-500"
+              class="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-500 text-base"
               :placeholder="t('Add internal notes about this order...')"
             ></textarea>
             <div class="mt-3 flex justify-end">
               <button
                 @click="saveNotes"
                 :disabled="savingNotes"
-                class="px-4 py-2 bg-gray-800 text-white rounded-md text-sm font-medium hover:bg-gray-900 disabled:opacity-50"
+                class="w-full sm:w-auto px-6 py-3 sm:py-2 bg-gray-800 text-white rounded-md text-sm font-medium hover:bg-gray-900 disabled:opacity-50"
               >
                 {{ savingNotes ? t('Saving...') : t('Save Notes') }}
               </button>
@@ -313,10 +396,10 @@
         </div>
 
         <!-- Actions -->
-        <div class="flex justify-end space-x-3">
+        <div class="flex flex-col sm:flex-row justify-end gap-3">
           <button
             @click="printInvoice"
-            class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
             <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
@@ -325,7 +408,7 @@
           </button>
           <button
             @click="sendEmailNotification"
-            class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gold-500 hover:bg-gold-600"
+            class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gold-500 hover:bg-gold-600"
           >
             <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
@@ -335,6 +418,44 @@
         </div>
       </div>
     </template>
+
+    <!-- Payment Status Update Modal -->
+    <div v-if="showPaymentStatusModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl max-w-md w-full p-6">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">{{ t('Update Payment Status') }}</h3>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              {{ t('Payment Status') }}
+            </label>
+            <select
+              v-model="paymentStatusForm.status"
+              class="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-500 text-base"
+            >
+              <option value="pending">{{ t('Pending') }}</option>
+              <option value="paid">{{ t('Paid') }}</option>
+              <option value="failed">{{ t('Failed') }}</option>
+              <option value="refunded">{{ t('Refunded') }}</option>
+            </select>
+          </div>
+          <div class="flex flex-col sm:flex-row justify-end gap-3">
+            <button
+              @click="showPaymentStatusModal = false"
+              class="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              {{ t('Cancel') }}
+            </button>
+            <button
+              @click="updatePaymentStatus"
+              :disabled="updatingPayment"
+              class="w-full sm:w-auto px-4 py-2 bg-gold-500 text-white rounded-md text-sm font-medium hover:bg-gold-600 disabled:opacity-50"
+            >
+              {{ updatingPayment ? t('Updating...') : t('Update') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -346,6 +467,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useLanguageStore } from '@/stores/language'
 import { showNotification } from '@/utils/notifications'
 import { showConfirmation } from '@/utils/confirmation'
+import type { PaymentStatus } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -358,13 +480,20 @@ const order = ref<any>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
 const updating = ref(false)
+const updatingPayment = ref(false)
 const savingNotes = ref(false)
 const adminNotes = ref('')
+const showPaymentStatusModal = ref(false)
 
 // Form state
 const statusForm = reactive({
   status: 'pending',
-  trackingNumber: ''
+  trackingNumber: '',
+  note: ''
+})
+
+const paymentStatusForm = reactive({
+  status: 'pending' as PaymentStatus
 })
 
 // Methods
@@ -393,15 +522,25 @@ const getStatusColor = (status: string) => {
   return colors[status] || 'bg-gray-100 text-gray-800'
 }
 
-const getStatusText = (status: string) => {
-  const texts: Record<string, string> = {
-    pending: t('Pending'),
-    processing: t('Processing'),
-    shipped: t('Shipped'),
-    delivered: t('Delivered'),
-    cancelled: t('Cancelled')
+const getTimelineIconColor = (status: string) => {
+  const colors: Record<string, string> = {
+    pending: 'bg-yellow-500',
+    processing: 'bg-blue-500',
+    shipped: 'bg-purple-500',
+    delivered: 'bg-green-500',
+    cancelled: 'bg-red-500'
   }
-  return texts[status] || status
+  return colors[status] || 'bg-gray-500'
+}
+
+const getPaymentStatusClasses = (status: string) => {
+  const classes: Record<string, string> = {
+    pending: 'bg-yellow-100 text-yellow-800',
+    paid: 'bg-green-100 text-green-800',
+    failed: 'bg-red-100 text-red-800',
+    refunded: 'bg-gray-100 text-gray-800'
+  }
+  return classes[status] || 'bg-gray-100 text-gray-800'
 }
 
 const getPaymentMethodText = (method: string) => {
@@ -418,7 +557,6 @@ const goBack = () => {
 }
 
 const fetchOrder = async () => {
-  // Don't fetch if user is not admin
   if (!authStore.isAdmin) {
     error.value = t('Admin access required')
     loading.value = false
@@ -430,23 +568,21 @@ const fetchOrder = async () => {
   error.value = null
   
   try {
-    console.log('Fetching order with ID:', orderId)
     const fetchedOrder = await ordersStore.fetchOrderById(orderId)
     if (fetchedOrder) {
       order.value = fetchedOrder
       statusForm.status = fetchedOrder.status
       statusForm.trackingNumber = fetchedOrder.trackingNumber || ''
       adminNotes.value = fetchedOrder.adminNotes || ''
+      paymentStatusForm.status = fetchedOrder.paymentStatus
     } else {
       error.value = t('Order not found')
     }
   } catch (err: any) {
     console.error('Error loading order:', err)
-    if (err.code === 'permission-denied') {
-      error.value = t('Permission denied. Please check your admin access.')
-    } else {
-      error.value = t('Failed to load order details')
-    }
+    error.value = err.code === 'permission-denied' 
+      ? t('Permission denied. Please check your admin access.')
+      : t('Failed to load order details')
   } finally {
     loading.value = false
   }
@@ -471,12 +607,13 @@ const updateOrderStatus = async () => {
     const success = await ordersStore.updateOrderStatus(
       order.value.id,
       statusForm.status as any,
-      statusForm.trackingNumber
+      statusForm.trackingNumber,
+      statusForm.note
     )
     
     if (success) {
       showNotification.success(t('Order status updated successfully'))
-      await fetchOrder() // Refresh data
+      await fetchOrder()
     }
   } catch (err) {
     showNotification.error(t('Failed to update order status'))
@@ -485,10 +622,34 @@ const updateOrderStatus = async () => {
   }
 }
 
+const updatePaymentStatus = async () => {
+  if (!order.value) return
+  
+  updatingPayment.value = true
+  
+  try {
+    const success = await ordersStore.updatePaymentStatus(
+      order.value.id,
+      paymentStatusForm.status
+    )
+    
+    if (success) {
+      showPaymentStatusModal.value = false
+      await fetchOrder()
+      showNotification.success(t('Payment status updated successfully'))
+    }
+  } catch (err) {
+    showNotification.error(t('Failed to update payment status'))
+  } finally {
+    updatingPayment.value = false
+  }
+}
+
 const resetStatusForm = () => {
   if (order.value) {
     statusForm.status = order.value.status
     statusForm.trackingNumber = order.value.trackingNumber || ''
+    statusForm.note = ''
   }
 }
 
@@ -517,14 +678,13 @@ const sendEmailNotification = async () => {
   if (!order.value) return
   
   try {
-    // Implement email sending
+    // In a real app, you'd call an API endpoint here
     showNotification.success(t('Email notification sent to customer'))
   } catch (err) {
     showNotification.error(t('Failed to send email'))
   }
 }
 
-// Watch for route param changes
 watch(() => route.params.orderId, () => {
   if (authStore.isAdmin) {
     fetchOrder()
@@ -532,7 +692,6 @@ watch(() => route.params.orderId, () => {
 })
 
 onMounted(() => {
-  // Check if user is admin before fetching
   if (authStore.isAdmin) {
     fetchOrder()
   } else {
@@ -544,7 +703,13 @@ onMounted(() => {
 
 <style scoped>
 .admin-order-details-page {
-  padding: 2rem;
+  padding: 1rem;
+}
+
+@media (min-width: 640px) {
+  .admin-order-details-page {
+    padding: 2rem;
+  }
 }
 
 @media print {
@@ -554,7 +719,8 @@ onMounted(() => {
   
   button,
   .bg-gold-500,
-  form {
+  form,
+  [class*="modal"] {
     display: none !important;
   }
 }

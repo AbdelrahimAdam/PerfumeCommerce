@@ -161,15 +161,15 @@
               <div class="bg-white rounded-lg shadow p-6">
                 <div class="flex items-center justify-between mb-2">
                   <h3 class="text-sm font-medium text-gray-500">{{ t('totalOrders') }}</h3>
-                  <span class="text-2xl font-bold text-gold-600">{{ stats.totalOrders || 0 }}</span>
+                  <span class="text-2xl font-bold text-gold-600">{{ stats.totalOrders }}</span>
                 </div>
-                <p class="text-xs text-gray-400">{{ t('lifetimeValue') }}: {{ formatCurrency(stats.totalSpent || 0) }}</p>
+                <p class="text-xs text-gray-400">{{ t('lifetimeValue') }}: {{ formatCurrency(stats.totalSpent) }}</p>
               </div>
 
               <div class="bg-white rounded-lg shadow p-6">
                 <div class="flex items-center justify-between mb-2">
                   <h3 class="text-sm font-medium text-gray-500">{{ t('pendingOrders') }}</h3>
-                  <span class="text-2xl font-bold text-yellow-600">{{ stats.pendingOrders || 0 }}</span>
+                  <span class="text-2xl font-bold text-yellow-600">{{ stats.pendingOrders }}</span>
                 </div>
                 <router-link to="/orders?status=pending" class="text-xs text-gold-600 hover:text-gold-700">
                   {{ t('viewPending') }} →
@@ -179,7 +179,7 @@
               <div class="bg-white rounded-lg shadow p-6">
                 <div class="flex items-center justify-between mb-2">
                   <h3 class="text-sm font-medium text-gray-500">{{ t('wishlistItems') }}</h3>
-                  <span class="text-2xl font-bold text-pink-600">{{ wishlistStore.totalItems }}</span>
+                  <span class="text-2xl font-bold text-pink-600">{{ wishlistTotal }}</span>
                 </div>
                 <router-link to="/wishlist" class="text-xs text-gold-600 hover:text-gold-700">
                   {{ t('viewWishlist') }} →
@@ -228,7 +228,7 @@
                         'px-3 py-1 rounded-full text-xs font-medium',
                         getStatusColor(order.status)
                       ]">
-                        {{ getStatusText(order.status) }}
+                        {{ ordersStore.getStatusText(order.status) }}
                       </span>
                       <span class="text-sm font-medium text-gray-900">{{ formatCurrency(order.total) }} EGP</span>
                     </div>
@@ -282,6 +282,7 @@ import { useOrdersStore } from '@/stores/orders'
 import { useWishlistStore } from '@/stores/wishlist'
 import { useLanguageStore } from '@/stores/language'
 import { authNotification } from '@/utils/notifications'
+import type { Address } from '@/types'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -294,7 +295,7 @@ const loading = ref(true)
 const ordersLoading = ref(false)
 const error = ref<string | null>(null)
 const recentOrders = ref<any[]>([])
-const addresses = ref<any[]>([])
+const addresses = ref<Address[]>([])
 const stats = ref({
   totalOrders: 0,
   totalSpent: 0,
@@ -315,6 +316,8 @@ const userInitials = computed(() => {
     .toUpperCase()
     .slice(0, 2)
 })
+
+const wishlistTotal = computed(() => wishlistStore.totalItems)
 
 // Methods
 const formatCurrency = (amount: number) => {
@@ -340,17 +343,6 @@ const getStatusColor = (status: string) => {
   return colors[status] || 'bg-gray-100 text-gray-800'
 }
 
-const getStatusText = (status: string) => {
-  const texts: Record<string, string> = {
-    pending: t('pending'),
-    processing: t('processing'),
-    shipped: t('shipped'),
-    delivered: t('delivered'),
-    cancelled: t('cancelled')
-  }
-  return texts[status] || status
-}
-
 const handleLogout = async () => {
   try {
     await authStore.logout()
@@ -371,27 +363,27 @@ const loadUserData = async () => {
   loading.value = true
   error.value = null
   ordersLoading.value = true
-  
+
   try {
     // Load recent orders
-    await ordersStore.fetchOrders({ 
-      userId: customer.value.id, 
-      limit: 5 
+    await ordersStore.fetchOrders({
+      userId: customer.value.id,
+      limit: 5
     })
     recentOrders.value = ordersStore.orders.slice(0, 5)
-    
+
     // Calculate stats
     stats.value.totalOrders = ordersStore.orders.length
     stats.value.totalSpent = ordersStore.orders
-      .filter(o => o.status === 'delivered')
+      .filter(o => o.paymentStatus === 'paid' && o.status !== 'cancelled')
       .reduce((sum, o) => sum + o.total, 0)
     stats.value.pendingOrders = ordersStore.orders
       .filter(o => ['pending', 'processing'].includes(o.status))
       .length
-    
-    // Load addresses from user profile
+
+    // Load addresses from user profile (if your customer object has addresses)
     addresses.value = customer.value.addresses || []
-    
+
   } catch (err) {
     console.error('Error loading user data:', err)
     error.value = t('failedToLoadUserData')
@@ -405,3 +397,4 @@ onMounted(() => {
   loadUserData()
 })
 </script>
+

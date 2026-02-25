@@ -29,7 +29,45 @@
         <!-- Content -->
         <div class="max-h-[70vh] overflow-y-auto">
           <div class="p-6 space-y-6">
-            <!-- Order Status -->
+            <!-- Order Status Timeline (new) -->
+            <div class="border-b border-gray-200 pb-4">
+              <h3 class="text-sm font-medium text-gray-900 mb-4 flex items-center">
+                <svg class="w-4 h-4 mr-2 text-gold-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                {{ t('Order Timeline') }}
+              </h3>
+              <div class="flow-root">
+                <ul class="-mb-8">
+                  <li v-for="(statusItem, index) in order.statusHistory" :key="index" class="relative pb-8">
+                    <div v-if="index !== order.statusHistory.length - 1" class="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200" aria-hidden="true"></div>
+                    <div class="relative flex space-x-3">
+                      <div>
+                        <span :class="['h-8 w-8 rounded-full flex items-center justify-center ring-8 ring-white', getTimelineIconColor(statusItem.status)]">
+                          <svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                          </svg>
+                        </span>
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <div>
+                          <p class="text-sm text-gray-900">
+                            {{ ordersStore.getStatusText(statusItem.status) }}
+                            <span v-if="statusItem.note" class="text-gray-500"> - {{ statusItem.note }}</span>
+                          </p>
+                          <p class="mt-0.5 text-xs text-gray-500">
+                            {{ formatDateTime(statusItem.timestamp) }}
+                            <span v-if="statusItem.updatedBy" class="ml-2">by {{ statusItem.updatedBy }}</span>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Order Status (existing, but we keep it for quick reference) -->
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200">
               <div>
                 <h3 class="text-sm font-medium text-gray-500 mb-1">{{ t('Order Status') }}</h3>
@@ -37,7 +75,7 @@
                   'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium',
                   getStatusColor(order.status)
                 ]">
-                  {{ getStatusText(order.status) }}
+                  {{ ordersStore.getStatusText(order.status) }}
                 </span>
               </div>
               <div class="text-sm text-gray-600">
@@ -105,9 +143,10 @@
                     <span>{{ t('Status') }}:</span>
                     <span :class="[
                       'font-medium',
-                      order.paymentStatus === 'paid' ? 'text-green-600' : 'text-yellow-600'
+                      order.paymentStatus === 'paid' ? 'text-green-600' : 
+                      order.paymentStatus === 'pending' ? 'text-yellow-600' : 'text-red-600'
                     ]">
-                      {{ t(order.paymentStatus) }}
+                      {{ ordersStore.getPaymentStatusText(order.paymentStatus) }}
                     </span>
                   </div>
                   <div class="flex justify-between">
@@ -200,7 +239,7 @@
         <!-- Footer Actions -->
         <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row sm:justify-end gap-3">
           <button
-            @click="$emit('download-invoice', order.id)"
+            @click="handleDownloadInvoice"
             class="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
           >
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -211,7 +250,7 @@
           
           <button
             v-if="order.status === 'delivered'"
-            @click="$emit('reorder', order)"
+            @click="handleReorder"
             class="inline-flex items-center justify-center px-4 py-2 bg-gold-500 text-white rounded-lg text-sm font-medium hover:bg-gold-600 transition-colors"
           >
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -222,7 +261,7 @@
           
           <button
             v-if="order.status === 'pending' || order.status === 'processing'"
-            @click="$emit('cancel', order)"
+            @click="handleCancel"
             class="inline-flex items-center justify-center px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
           >
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -239,7 +278,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useLanguageStore } from '@/stores/language'
+import { useOrdersStore } from '@/stores/orders'
 import { authNotification } from '@/utils/notifications'
+import { showConfirmation } from '@/utils/confirmation'
 
 const props = defineProps<{
   order: any
@@ -252,7 +293,9 @@ const emit = defineEmits<{
   (e: 'download-invoice', orderId: string): void
 }>()
 
-const { t } = useLanguageStore()
+const languageStore = useLanguageStore()
+const ordersStore = useOrdersStore()
+const { t } = languageStore
 
 const copied = ref(false)
 
@@ -269,6 +312,16 @@ const formatDate = (date: Date) => {
   })
 }
 
+const formatDateTime = (date: Date) => {
+  return new Date(date).toLocaleDateString('en-EG', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
 const getStatusColor = (status: string) => {
   const colors: Record<string, string> = {
     pending: 'bg-yellow-100 text-yellow-800',
@@ -280,15 +333,15 @@ const getStatusColor = (status: string) => {
   return colors[status] || 'bg-gray-100 text-gray-800'
 }
 
-const getStatusText = (status: string) => {
-  const texts: Record<string, string> = {
-    pending: t('Pending'),
-    processing: t('Processing'),
-    shipped: t('Shipped'),
-    delivered: t('Delivered'),
-    cancelled: t('Cancelled')
+const getTimelineIconColor = (status: string) => {
+  const colors: Record<string, string> = {
+    pending: 'bg-yellow-500',
+    processing: 'bg-blue-500',
+    shipped: 'bg-purple-500',
+    delivered: 'bg-green-500',
+    cancelled: 'bg-red-500'
   }
-  return texts[status] || status
+  return colors[status] || 'bg-gray-500'
 }
 
 const getPaymentMethodText = (method: string) => {
@@ -319,6 +372,45 @@ const copyTrackingNumber = async () => {
       authNotification.error(t('Copy failed'))
     }
   }
+}
+
+const handleReorder = async () => {
+  const confirmed = await showConfirmation({
+    title: t('Reorder Items'),
+    message: t('This will add all items from this order to your cart. Continue?'),
+    confirmText: t('Yes, Reorder'),
+    cancelText: t('Cancel'),
+    type: 'info'
+  })
+  if (confirmed) {
+    const success = await ordersStore.reorder(props.order.id)
+    if (success) {
+      emit('reorder', props.order)
+      emit('close')
+    }
+  }
+}
+
+const handleCancel = async () => {
+  const confirmed = await showConfirmation({
+    title: t('Cancel Order'),
+    message: t('Are you sure you want to cancel this order? This action cannot be undone.'),
+    confirmText: t('Yes, Cancel'),
+    cancelText: t('No, Keep'),
+    type: 'warning'
+  })
+  if (confirmed) {
+    const success = await ordersStore.cancelOrder(props.order.id)
+    if (success) {
+      emit('cancel', props.order)
+      authNotification.loggedIn(t('Order cancelled successfully'))
+      emit('close')
+    }
+  }
+}
+
+const handleDownloadInvoice = () => {
+  emit('download-invoice', props.order.id)
 }
 </script>
 

@@ -1,3 +1,4 @@
+<!-- src/pages/CheckoutPage.vue -->
 <template>
   <div class="min-h-screen bg-gradient-to-b from-gray-50 to-white">
     <!-- SEO Head -->
@@ -242,7 +243,7 @@
             <div class="space-y-4">
               <label class="flex items-start p-4 border-2 border-gray-300 rounded-xl cursor-pointer 
                            hover:border-primary-500 transition-all group"
-                     :class="{ 'border-primary-500 bg-primary-50': checkoutForm.paymentMethod === 'cash' }">
+                     :class="{ 'border-primary-500 bg-primary-50': checkoutForm.paymentMethod === 'cash_on_delivery' }">
                 <input
                   type="radio"
                   v-model="checkoutForm.paymentMethod"
@@ -276,7 +277,7 @@
               
               <label class="flex items-start p-4 border-2 border-gray-300 rounded-xl cursor-pointer 
                            hover:border-primary-500 transition-all group"
-                     :class="{ 'border-primary-500 bg-primary-50': checkoutForm.paymentMethod === 'bank' }">
+                     :class="{ 'border-primary-500 bg-primary-50': checkoutForm.paymentMethod === 'bank_transfer' }">
                 <input
                   type="radio"
                   v-model="checkoutForm.paymentMethod"
@@ -423,11 +424,11 @@
             <!-- Place Order Button -->
             <button
               @click="placeOrder"
-              :disabled="!isFormValid || isProcessing"
+              :disabled="!isFormValid || isProcessing || cartStore.isEmpty"
               :class="[
                 'w-full py-4 rounded-xl font-bold text-lg transition-all duration-300',
                 'flex items-center justify-center gap-3',
-                isFormValid && !isProcessing
+                isFormValid && !isProcessing && !cartStore.isEmpty
                   ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-gold hover:shadow-gold-lg hover:-translate-y-1'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               ]"
@@ -589,9 +590,18 @@ const validateForm = () => {
 }
 
 const placeOrder = async () => {
+  // Double‑check cart isn't empty (should already be handled, but safe)
+  if (cartStore.isEmpty) {
+    authNotification.error(currentLanguage.value === 'en'
+      ? 'Your cart is empty'
+      : 'سلة التسوق فارغة')
+    router.push('/cart')
+    return
+  }
+
   if (!validateForm()) {
-    authNotification.error(currentLanguage.value === 'en' 
-      ? 'Please fix the errors in the form' 
+    authNotification.error(currentLanguage.value === 'en'
+      ? 'Please fix the errors in the form'
       : 'يرجى تصحيح الأخطاء في النموذج')
     return
   }
@@ -599,7 +609,7 @@ const placeOrder = async () => {
   isProcessing.value = true
 
   try {
-    // Prepare shipping address
+    // Prepare shipping address (matches store's ShippingAddress type)
     const shippingAddress = {
       name: checkoutForm.value.fullName,
       email: checkoutForm.value.email,
@@ -616,22 +626,25 @@ const placeOrder = async () => {
       checkoutForm.value.notes
     )
 
-    if (order) {
-      // Show success notification
-      authNotification.loggedIn(currentLanguage.value === 'en'
-        ? `Order #${order.orderNumber} placed successfully!`
-        : `تم تأكيد الطلب رقم #${order.orderNumber} بنجاح!`)
-      
-      // Redirect to order confirmation page
-      router.push(`/order-confirmation/${order.id}`)
-    } else {
-      throw new Error('Failed to create order')
+    if (!order) {
+      // If createOrder returned null, use the store's error message (if any)
+      throw new Error(ordersStore.error || (currentLanguage.value === 'en'
+        ? 'Failed to create order'
+        : 'فشل إنشاء الطلب'))
     }
+
+    // Success
+    authNotification.loggedIn(currentLanguage.value === 'en'
+      ? `Order #${order.orderNumber} placed successfully!`
+      : `تم تأكيد الطلب رقم #${order.orderNumber} بنجاح!`)
+    
+    // Redirect to order confirmation page
+    router.push(`/order-confirmation/${order.id}`)
   } catch (error: any) {
     console.error('Checkout error:', error)
-    authNotification.error(currentLanguage.value === 'en'
-      ? error.message || 'Failed to process your order. Please try again.'
-      : 'فشل معالجة طلبك. يرجى المحاولة مرة أخرى.')
+    authNotification.error(error.message || (currentLanguage.value === 'en'
+      ? 'Failed to process your order. Please try again.'
+      : 'فشل معالجة طلبك. يرجى المحاولة مرة أخرى.'))
   } finally {
     isProcessing.value = false
   }

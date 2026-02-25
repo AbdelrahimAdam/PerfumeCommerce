@@ -7,8 +7,6 @@
       type="website"
     />
 
-   
-
     <div class="container mx-auto px-4 py-8">
       <!-- Breadcrumb -->
       <nav class="flex items-center text-sm text-gray-600 mb-8" 
@@ -111,7 +109,7 @@
                   <div class="flex items-center justify-between">
                     <div>
                       <span class="text-xs font-medium text-primary-300">
-                        {{ t('Products') }}: {{ getBrandProductsCount(brand.slug) }}
+                        {{ t('Products') }}: {{ brand.productIds?.length || 0 }}
                       </span>
                       <span class="mx-2 text-gray-400">•</span>
                       <span class="text-xs text-gray-300">
@@ -132,7 +130,7 @@
                 </h3>
                 <div class="flex items-center justify-between">
                   <span class="text-xs text-gray-200">
-                    {{ getBrandProductsCount(brand.slug) }} {{ t('Products') }}
+                    {{ brand.productIds?.length || 0 }} {{ t('Products') }}
                   </span>
                   <span class="text-primary-300 text-xs">
                     {{ isRTL ? 'استكشف' : 'Explore' }}
@@ -223,12 +221,6 @@ const uniqueCategories = computed(() => {
   })
   return Array.from(categories).sort()
 })
-
-// Get products count for a brand
-const getBrandProductsCount = (brandSlug: string) => {
-  const brand = brandsStore.brands.find(b => b.slug === brandSlug)
-  return brand?.productIds?.length || 0
-}
 
 // Handle image error
 const handleImageError = (event: Event) => {

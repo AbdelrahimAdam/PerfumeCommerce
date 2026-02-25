@@ -1,6 +1,6 @@
 <!-- src/pages/OrderDetailsPage.vue -->
 <template>
-  <div class="order-details-page min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+  <div class="order-details-page min-h-screen bg-gray-50 py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
     <div class="max-w-4xl mx-auto">
       <!-- Loading State -->
       <div v-if="loading" class="text-center py-12">
@@ -9,7 +9,7 @@
       </div>
 
       <!-- Email Verification (for guests) -->
-      <div v-else-if="!isVerified && !ordersStore.currentOrder" class="bg-white rounded-lg shadow-lg p-8 max-w-md mx-auto">
+      <div v-else-if="!isVerified && !ordersStore.currentOrder" class="bg-white rounded-lg shadow-lg p-6 sm:p-8 max-w-md mx-auto">
         <h2 class="text-xl font-medium text-gray-900 mb-4">{{ t('Verify Your Email') }}</h2>
         <p class="text-sm text-gray-600 mb-6">{{ t('Please enter the email address used for this order to view details.') }}</p>
         
@@ -20,14 +20,14 @@
               v-model="verificationEmail"
               type="email"
               required
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-500"
+              class="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-500 text-base"
               :placeholder="t('Enter your email')"
             />
           </div>
           <button
             type="submit"
             :disabled="verifying"
-            class="w-full py-2 px-4 bg-gold-500 text-white rounded-md hover:bg-gold-600 disabled:opacity-50"
+            class="w-full py-3 px-4 bg-gold-500 text-white rounded-md hover:bg-gold-600 disabled:opacity-50 text-base font-medium"
           >
             {{ verifying ? t('Verifying...') : t('View Order') }}
           </button>
@@ -42,7 +42,7 @@
         <h2 class="mt-4 text-xl font-medium text-gray-900">{{ t('Order Not Found') }}</h2>
         <p class="mt-2 text-gray-500">{{ error }}</p>
         <div class="mt-6">
-          <router-link to="/" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gold-500 hover:bg-gold-600">
+          <router-link to="/" class="inline-flex items-center px-6 py-3 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gold-500 hover:bg-gold-600">
             {{ t('Go Home') }}
           </router-link>
         </div>
@@ -51,7 +51,7 @@
       <!-- Order Details -->
       <div v-else-if="order" class="bg-white rounded-lg shadow-lg overflow-hidden">
         <!-- Header -->
-        <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
+        <div class="bg-gray-50 px-4 sm:px-6 py-4 border-b border-gray-200">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 class="text-xl font-bold text-gray-900">{{ t('Order Details') }}</h1>
@@ -61,13 +61,29 @@
               'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium self-start',
               getStatusColor(order.status)
             ]">
-              {{ getStatusText(order.status) }}
+              {{ ordersStore.getStatusText(order.status) }}
             </span>
           </div>
         </div>
 
+        <!-- Status Timeline - Mobile -->
+        <div class="sm:hidden px-4 py-4 border-b border-gray-200">
+          <h3 class="text-sm font-medium text-gray-900 mb-3">{{ t('Order Timeline') }}</h3>
+          <div class="space-y-3">
+            <div v-for="(statusItem, index) in order.statusHistory" :key="index" class="flex items-start space-x-3">
+              <div class="flex-shrink-0">
+                <span :class="['w-2 h-2 mt-2 rounded-full', getTimelineDotColor(statusItem.status)]"></span>
+              </div>
+              <div class="flex-1">
+                <p class="text-sm text-gray-900">{{ ordersStore.getStatusText(statusItem.status) }}</p>
+                <p class="text-xs text-gray-500">{{ formatDate(statusItem.timestamp) }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Tracking Info -->
-        <div v-if="order.trackingNumber" class="bg-blue-50 px-6 py-4 border-b border-blue-100">
+        <div v-if="order.trackingNumber" class="bg-blue-50 px-4 sm:px-6 py-4 border-b border-blue-100">
           <div class="flex items-center justify-between">
             <div>
               <p class="text-sm font-medium text-blue-800">{{ t('Tracking Number') }}</p>
@@ -83,28 +99,30 @@
         </div>
 
         <!-- Order Items -->
-        <div class="px-6 py-6">
+        <div class="px-4 sm:px-6 py-6">
           <h2 class="text-lg font-medium text-gray-900 mb-4">{{ t('Items Ordered') }}</h2>
           <div class="space-y-4">
-            <div v-for="item in order.items" :key="item.id" class="flex items-start py-3 border-b border-gray-100 last:border-0">
-              <div class="flex-shrink-0 w-20 h-20 bg-gray-100 rounded overflow-hidden">
-                <img :src="item.image || '/images/default-product.jpg'" :alt="item.name" class="w-full h-full object-cover">
-              </div>
-              <div class="ml-4 flex-1">
-                <h3 class="text-sm font-medium text-gray-900">{{ item.name }}</h3>
-                <p class="text-xs text-gray-500 mt-1">{{ item.size }} • {{ item.concentration }}</p>
-                <p class="text-xs text-gray-500">{{ item.brand }}</p>
-                <div class="mt-2 flex justify-between items-center">
-                  <span class="text-sm text-gray-900">{{ formatCurrency(item.price) }} EGP × {{ item.quantity }}</span>
-                  <span class="text-sm font-medium text-gray-900">{{ formatCurrency(item.price * item.quantity) }} EGP</span>
+            <div v-for="item in order.items" :key="item.id" class="flex flex-col sm:flex-row sm:items-start py-3 border-b border-gray-100 last:border-0">
+              <div class="flex items-start">
+                <div class="flex-shrink-0 w-16 h-16 bg-gray-100 rounded overflow-hidden">
+                  <img :src="item.image || '/images/default-product.jpg'" :alt="item.name" class="w-full h-full object-cover">
                 </div>
+                <div class="ml-4 flex-1">
+                  <h3 class="text-sm font-medium text-gray-900">{{ item.name }}</h3>
+                  <p class="text-xs text-gray-500 mt-1">{{ item.size }} • {{ item.concentration }}</p>
+                  <p class="text-xs text-gray-500">{{ item.brand }}</p>
+                </div>
+              </div>
+              <div class="mt-2 sm:mt-0 sm:ml-4 flex justify-between items-center">
+                <span class="text-sm text-gray-900">{{ formatCurrency(item.price) }} EGP × {{ item.quantity }}</span>
+                <span class="text-sm font-medium text-gray-900 ml-4">{{ formatCurrency(item.price * item.quantity) }} EGP</span>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Order Summary -->
-        <div class="bg-gray-50 px-6 py-6 border-t border-gray-200">
+        <div class="bg-gray-50 px-4 sm:px-6 py-6 border-t border-gray-200">
           <h3 class="text-sm font-medium text-gray-900 mb-4">{{ t('Order Summary') }}</h3>
           <div class="space-y-2">
             <div class="flex justify-between text-sm">
@@ -127,7 +145,7 @@
         </div>
 
         <!-- Shipping Information -->
-        <div class="px-6 py-6 border-t border-gray-200">
+        <div class="px-4 sm:px-6 py-6 border-t border-gray-200">
           <h3 class="text-sm font-medium text-gray-900 mb-4">{{ t('Shipping Information') }}</h3>
           <div class="text-sm text-gray-600 space-y-1">
             <p><span class="font-medium">{{ t('Name') }}:</span> {{ order.customer.name }}</p>
@@ -140,13 +158,13 @@
         </div>
 
         <!-- Payment Information -->
-        <div class="px-6 py-6 bg-gray-50 border-t border-gray-200">
+        <div class="px-4 sm:px-6 py-6 bg-gray-50 border-t border-gray-200">
           <h3 class="text-sm font-medium text-gray-900 mb-4">{{ t('Payment Information') }}</h3>
           <div class="text-sm text-gray-600 space-y-1">
             <p><span class="font-medium">{{ t('Payment Method') }}:</span> {{ getPaymentMethodText(order.paymentMethod) }}</p>
             <p><span class="font-medium">{{ t('Payment Status') }}:</span> 
               <span :class="order.paymentStatus === 'paid' ? 'text-green-600' : 'text-yellow-600'">
-                {{ t(order.paymentStatus) }}
+                {{ ordersStore.getPaymentStatusText(order.paymentStatus) }}
               </span>
             </p>
             <p><span class="font-medium">{{ t('Order Date') }}:</span> {{ formatDate(order.createdAt) }}</p>
@@ -154,10 +172,10 @@
         </div>
 
         <!-- Actions -->
-        <div class="px-6 py-6 border-t border-gray-200 flex flex-col sm:flex-row gap-3 justify-end">
+        <div class="px-4 sm:px-6 py-6 border-t border-gray-200 flex flex-col sm:flex-row gap-3 justify-end">
           <button
             @click="downloadInvoice"
-            class="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
             <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
@@ -167,14 +185,14 @@
           <button
             v-if="canCancel"
             @click="cancelOrder"
-            class="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
+            class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
           >
             {{ t('Cancel Order') }}
           </button>
           <button
             v-if="canReorder"
             @click="reorder"
-            class="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gold-500 hover:bg-gold-600"
+            class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gold-500 hover:bg-gold-600"
           >
             <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
@@ -225,7 +243,9 @@ const formatDate = (date: Date) => {
   return new Date(date).toLocaleDateString('en-EG', {
     year: 'numeric',
     month: 'long',
-    day: 'numeric'
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
   })
 }
 
@@ -240,15 +260,15 @@ const getStatusColor = (status: string) => {
   return colors[status] || 'bg-gray-100 text-gray-800'
 }
 
-const getStatusText = (status: string) => {
-  const texts: Record<string, string> = {
-    pending: t('Pending'),
-    processing: t('Processing'),
-    shipped: t('Shipped'),
-    delivered: t('Delivered'),
-    cancelled: t('Cancelled')
+const getTimelineDotColor = (status: string) => {
+  const colors: Record<string, string> = {
+    pending: 'bg-yellow-500',
+    processing: 'bg-blue-500',
+    shipped: 'bg-purple-500',
+    delivered: 'bg-green-500',
+    cancelled: 'bg-red-500'
   }
-  return texts[status] || status
+  return colors[status] || 'bg-gray-500'
 }
 
 const getPaymentMethodText = (method: string) => {
@@ -280,7 +300,8 @@ const verifyEmail = async () => {
 
 const trackOrder = () => {
   if (order.value?.trackingNumber) {
-    router.push(`/track-order/${order.value.trackingNumber}`)
+    // In a real app, you'd redirect to a tracking page or open a tracking URL
+    window.open(`https://www.tracking.com/${order.value.trackingNumber}`, '_blank')
   }
 }
 
@@ -302,8 +323,9 @@ const cancelOrder = async () => {
   })
   
   if (confirmed) {
-    await ordersStore.cancelOrder(order.value.id)
+    await ordersStore.cancelOrder(order.value.id, 'Cancelled by customer')
     showNotification.success(t('Order cancelled successfully'))
+    await ordersStore.fetchOrderById(order.value.id)
   }
 }
 
@@ -317,7 +339,6 @@ const reorder = async () => {
 onMounted(async () => {
   const orderId = route.params.orderId as string
   
-  // If user is authenticated, try to fetch order directly
   if (authStore.isAuthenticated) {
     loading.value = true
     try {
@@ -333,3 +354,9 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+.order-details-page {
+  min-height: calc(100vh - 200px);
+}
+</style>

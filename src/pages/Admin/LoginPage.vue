@@ -248,31 +248,4 @@ const handleLogin = async () => {
     loading.value = false
   }
 }
-
-// Social login handlers (if needed)
-const handleGoogleLogin = async () => {
-  loading.value = true
-  try {
-    await authStore.loginWithGoogle?.()
-    authNotification.loggedIn('Customer')
-    router.push('/account')
-  } catch (err) {
-    authNotification.error(t('socialLoginFailed'))
-  } finally {
-    loading.value = false
-  }
-}
-
-const handleFacebookLogin = async () => {
-  loading.value = true
-  try {
-    await authStore.loginWithFacebook?.()
-    authNotification.loggedIn('Customer')
-    router.push('/account')
-  } catch (err) {
-    authNotification.error(t('socialLoginFailed'))
-  } finally {
-    loading.value = false
-  }
-}
 </script>
