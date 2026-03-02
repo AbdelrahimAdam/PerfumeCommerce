@@ -7,10 +7,24 @@
     />
 
     <div class="container">
-      <!-- Header -->
+      <!-- Header with Back Button -->
       <div class="page-header">
-        <h1 class="page-title">{{ t('My Wishlist') }}</h1>
-        <p class="page-subtitle">{{ t('Save your favorite perfumes for later') }}</p>
+        <div class="header-content">
+          <button
+            @click="goBack"
+            class="back-button"
+            aria-label="Go back"
+          >
+            <svg class="back-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            <span class="back-text">{{ t('back') }}</span>
+          </button>
+          <div class="title-wrapper">
+            <h1 class="page-title">{{ t('My Wishlist') }}</h1>
+            <p class="page-subtitle">{{ t('Save your favorite perfumes for later') }}</p>
+          </div>
+        </div>
       </div>
 
       <!-- Loading State -->
@@ -337,6 +351,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useRouter } from 'vue-router'
 import { useLanguageStore } from '@/stores/language'
 import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
@@ -345,6 +360,7 @@ import { useProductsStore } from '@/stores/products'
 import SEOHead from '@/components/UI/SEOHead.vue'
 import { showNotification } from '@/utils/notifications'
 
+const router = useRouter()
 const languageStore = useLanguageStore()
 const authStore = useAuthStore()
 const cartStore = useCartStore()
@@ -403,6 +419,10 @@ const getItemName = (item: any) => {
 }
 
 // Methods
+const goBack = () => {
+  router.back()
+}
+
 const formatPrice = (price: number) => {
   if (!price && price !== 0) return 'LE 0'
   return new Intl.NumberFormat('en-EG', {
@@ -643,8 +663,40 @@ onUnmounted(() => {
 
 /* Header */
 .page-header {
-  text-align: center;
   margin-bottom: 2rem;
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: none;
+  border: none;
+  color: rgba(26, 18, 11, 0.7);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  transition: color 0.2s;
+  flex-shrink: 0;
+}
+
+.back-button:hover {
+  color: #ec4899;
+}
+
+.back-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.title-wrapper {
+  flex: 1;
 }
 
 .page-title {

@@ -87,11 +87,15 @@
                 <!-- Current Image -->
                 <div class="aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-red-50 to-pink-50 mb-4">
                   <img
-                    :src="offer.imageUrl"
+                    :src="offer.imageUrl || '/images/default-offer.jpg'"
                     :alt="offer.title"
                     class="w-full h-full object-contain p-4"
                     @error="() => handleImageError(offer)"
                   />
+                  <!-- Show base64 badge if image is base64 -->
+                  <div v-if="offer.imageUrl?.startsWith('data:image/')" class="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                    Base64
+                  </div>
                 </div>
                 
                 <!-- Image Upload -->
@@ -103,7 +107,7 @@
                     type="file"
                     :ref="(el) => setFileInputRef(el, index)"
                     @change="(event) => handleImageUpload(event, index)"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp"
                     class="hidden"
                   />
                   <button
@@ -115,6 +119,7 @@
                     </svg>
                     {{ t('Choose Image') }}
                   </button>
+                  <p class="text-xs text-gray-500 mt-2">Max 500KB. JPG, PNG, WebP. Images are stored as base64.</p>
                 </div>
               </div>
             </div>
@@ -345,8 +350,6 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage' // removed unused getStorage
-import { storage } from '@/firebase/config' // Adjust path if needed
 import { useLanguageStore } from '@/stores/language'
 
 // Define offer type
@@ -435,43 +438,48 @@ const uploadOfferImage = (index: number) => {
   fileInputs.value[index]?.click()
 }
 
+// Convert file to base64
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 const handleImageUpload = async (event: Event, index: number) => {
   const input = event.target as HTMLInputElement
   if (!input.files || !input.files[0]) return
 
   const file = input.files[0]
   
-  // Validate file
-  if (file.size > 2 * 1024 * 1024) {
-    alert(t('Image must be less than 2MB'))
+  // Validate file size (500KB max for Spark plan)
+  if (file.size > 500 * 1024) {
+    alert(t('Image too large! Maximum size is 500KB.'))
     return
   }
 
-  if (!file.type.startsWith('image/')) {
-    alert(t('Please select an image file'))
+  // Validate file type
+  const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+  if (!validTypes.includes(file.type)) {
+    alert(t('Invalid file type. Please upload JPG, PNG, or WebP image.'))
     return
   }
 
   try {
-    // Create unique filename
-    const timestamp = Date.now()
-    const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, '_')
-    const filePath = `offers/${timestamp}_${safeName}`
-    const fileRef = storageRef(storage, filePath)
-    
-    // Upload file
-    await uploadBytes(fileRef, file)
-    
-    // Get download URL
-    const downloadURL = await getDownloadURL(fileRef)
+    // Convert to base64
+    const base64 = await fileToBase64(file)
     
     // Update offer image
-    offersData.value[index].imageUrl = downloadURL
+    offersData.value[index].imageUrl = base64
     updateOffer(index)
     
+    // Show success message (optional)
+    console.log('✅ Image converted to base64')
   } catch (error) {
-    console.error('Error uploading offer image:', error)
-    alert(t('Failed to upload image. Please try again.'))
+    console.error('❌ Error converting image:', error)
+    alert(t('Failed to process image. Please try again.'))
   }
 }
 

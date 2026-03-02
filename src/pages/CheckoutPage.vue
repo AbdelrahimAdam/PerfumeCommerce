@@ -53,6 +53,37 @@
 
     <!-- Checkout Content -->
     <div v-else class="container mx-auto px-4 py-8 max-w-7xl">
+      <!-- Guest Info Notice with Sign Up Link -->
+      <div v-if="!isAuthenticated" class="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <div class="flex flex-col sm:flex-row items-start gap-3">
+          <div class="text-blue-500 mt-1 flex-shrink-0">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                    d="M13 16h-1v-4h1m0-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div class="flex-1">
+            <p class="text-sm font-medium text-blue-800">
+              {{ currentLanguage === 'en' ? 'You are checking out as a guest' : 'أنت تقوم بالدفع كضيف' }}
+            </p>
+            <div class="mt-1 space-y-1 text-sm text-blue-600">
+              <p>
+                <router-link to="/login" class="text-gold-600 hover:text-gold-700 font-medium underline underline-offset-2">
+                  {{ currentLanguage === 'en' ? 'Sign in' : 'سجل الدخول' }}
+                </router-link>
+                {{ currentLanguage === 'en' ? 'to save your details and track orders easily, or' : 'لحفظ تفاصيلك وتتبع الطلبات بسهولة، أو' }}
+                <router-link to="/register" class="text-gold-600 hover:text-gold-700 font-medium underline underline-offset-2">
+                  {{ currentLanguage === 'en' ? 'create an account' : 'أنشئ حساباً' }}
+                </router-link>.
+              </p>
+              <p>
+                {{ currentLanguage === 'en' ? 'Continue as guest by completing the form below and clicking "Place Order".' : 'تابع كضيف بإكمال النموذج أدناه والنقر على "تأكيد الطلب".' }}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Breadcrumb -->
       <nav class="flex items-center text-sm text-gray-600 mb-8" 
            :class="{ 'flex-row-reverse': isRTL }">
@@ -496,6 +527,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useLanguageStore } from '@/stores/language'
+import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
 import { useOrdersStore } from '@/stores/orders'
 import SEOHead from '@/components/UI/SEOHead.vue'
@@ -503,11 +535,13 @@ import { authNotification } from '@/utils/notifications'
 
 const router = useRouter()
 const languageStore = useLanguageStore()
+const authStore = useAuthStore()
 const cartStore = useCartStore()
 const ordersStore = useOrdersStore()
 
 // Use storeToRefs to get properly typed refs
 const { currentLanguage, isRTL } = storeToRefs(languageStore)
+const { isAuthenticated, customer } = storeToRefs(authStore)
 
 // Helper to get localized text
 const getLocalizedText = (obj: { en: string; ar: string }) => {
@@ -591,7 +625,6 @@ const validateForm = () => {
 }
 
 const placeOrder = async () => {
-  // Double‑check cart isn't empty (should already be handled, but safe)
   if (cartStore.isEmpty) {
     authNotification.error(currentLanguage.value === 'en'
       ? 'Your cart is empty'
@@ -607,10 +640,17 @@ const placeOrder = async () => {
     return
   }
 
+  // If not authenticated, redirect to login with a return URL
+  if (!isAuthenticated.value) {
+    // Save current form data to restore after login/registration
+    sessionStorage.setItem('checkout_form', JSON.stringify(checkoutForm.value))
+    router.push(`/login?redirect=${encodeURIComponent('/checkout')}`)
+    return
+  }
+
   isProcessing.value = true
 
   try {
-    // Prepare shipping address (matches store's ShippingAddress type)
     const shippingAddress = {
       name: checkoutForm.value.fullName,
       email: checkoutForm.value.email,
@@ -620,7 +660,6 @@ const placeOrder = async () => {
       country: 'Egypt'
     }
 
-    // Create order using orders store
     const order = await ordersStore.createOrder(
       shippingAddress,
       checkoutForm.value.paymentMethod,
@@ -628,18 +667,18 @@ const placeOrder = async () => {
     )
 
     if (!order) {
-      // If createOrder returned null, use the store's error message (if any)
       throw new Error(ordersStore.error || (currentLanguage.value === 'en'
         ? 'Failed to create order'
         : 'فشل إنشاء الطلب'))
     }
 
-    // Success
+    // Clear saved form data after successful order
+    sessionStorage.removeItem('checkout_form')
+
     authNotification.loggedIn(currentLanguage.value === 'en'
       ? `Order #${order.orderNumber} placed successfully!`
       : `تم تأكيد الطلب رقم #${order.orderNumber} بنجاح!`)
     
-    // Redirect to order confirmation page
     router.push(`/order-confirmation/${order.id}`)
   } catch (error: any) {
     console.error('Checkout error:', error)
@@ -651,12 +690,69 @@ const placeOrder = async () => {
   }
 }
 
+// Restore saved form data if any (e.g., after login/register)
+const restoreSavedForm = () => {
+  const saved = sessionStorage.getItem('checkout_form')
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved)
+      Object.assign(checkoutForm.value, parsed)
+      // Clear after restoring to avoid reapplying on refresh
+      sessionStorage.removeItem('checkout_form')
+      return true
+    } catch (e) {
+      console.error('Failed to restore checkout form', e)
+    }
+  }
+  return false
+}
+
+// Pre‑fill form with the customer's saved profile data
+const prefillWithCustomerData = () => {
+  if (!isAuthenticated.value || !customer.value) return
+
+  const cust = customer.value
+
+  // Contact info
+  if (!checkoutForm.value.fullName) {
+    checkoutForm.value.fullName = cust.displayName || ''
+  }
+  if (!checkoutForm.value.email) {
+    checkoutForm.value.email = cust.email || ''
+  }
+  if (!checkoutForm.value.phone) {
+    checkoutForm.value.phone = cust.phoneNumber || ''
+  }
+
+  // Address – use the first saved address if available
+  if (cust.addresses && cust.addresses.length > 0) {
+    const addr = cust.addresses[0] // you might want to select the default address if you have that field
+    if (!checkoutForm.value.address) {
+      checkoutForm.value.address = addr.addressLine1 || ''
+    }
+    if (!checkoutForm.value.city) {
+      checkoutForm.value.city = addr.city || ''
+    }
+    if (!checkoutForm.value.governorate) {
+      checkoutForm.value.governorate = (addr as any).state || addr.city || ''
+    }
+  }
+}
+
 // On mounted
 onMounted(() => {
   loading.value = true
   
   // Restore cart from localStorage
   cartStore.restoreCart()
+  
+  // 1. First restore any temporarily saved form (from previous interrupted checkout)
+  const restored = restoreSavedForm()
+  
+  // 2. If no saved form was restored, pre‑fill with customer data
+  if (!restored) {
+    prefillWithCustomerData()
+  }
   
   setTimeout(() => {
     // If cart is empty, redirect to cart page

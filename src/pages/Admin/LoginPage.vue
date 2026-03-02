@@ -192,7 +192,7 @@ const router = useRouter()
 const languageStore = useLanguageStore()
 const authStore = useAuthStore()
 
-const { t } = languageStore  // Removed unused isRTL
+const { t } = languageStore
 
 const loading = ref(false)
 const showPassword = ref(false)
@@ -209,37 +209,18 @@ const handleLogin = async () => {
   error.value = ''
 
   try {
-    // First try admin login
-    try {
-      await authStore.login(form.email, form.password)
-      
-      // If admin login succeeds, redirect to admin dashboard
-      authNotification.loggedIn('Admin')
+    const user = await authStore.authenticate({
+      email: form.email,
+      password: form.password,
+      remember: form.remember
+    })
+
+    // Redirect based on role
+    if (user.role === 'admin') {
       router.push('/admin')
-      return
-    } catch (adminError: any) {
-      // If admin login fails with "not a super-admin" error, try customer login
-      if (adminError.message === 'Access denied: not a super-admin') {
-        try {
-          await authStore.customerLogin({
-            email: form.email,
-            password: form.password,
-            remember: form.remember
-          })
-          
-          // If customer login succeeds, redirect to account page
-          authNotification.loggedIn('Customer')
-          const redirectPath = router.currentRoute.value.query.redirect as string || '/account'
-          router.push(redirectPath)
-          return
-        } catch (customerError: any) {
-          // Customer login also failed
-          error.value = t('invalidCredentials')
-        }
-      } else {
-        // Admin login failed for other reasons (wrong password, etc.)
-        error.value = adminError.message || t('invalidCredentials')
-      }
+    } else {
+      const redirectPath = router.currentRoute.value.query.redirect as string || '/account'
+      router.push(redirectPath)
     }
   } catch (err: any) {
     console.error('Login error:', err)

@@ -296,7 +296,37 @@ export const useOrdersStore = defineStore('orders', () => {
         error.value = 'Order not found'
         return null
       }
-    } catch (err) {
+    } catch (err: any) {
+      // If permission error, try to get from sessionStorage (for guests)
+      if (err.code === 'permission-denied') {
+        const savedOrder = sessionStorage.getItem('last_created_order')
+        if (savedOrder) {
+          try {
+            const parsed = JSON.parse(savedOrder)
+            // Check if it's the same order
+            if (parsed.id === orderId) {
+              // Convert string dates back to Date objects
+              const restoredOrder: Order = {
+                ...parsed,
+                createdAt: new Date(parsed.createdAt),
+                updatedAt: new Date(parsed.updatedAt),
+                shippedAt: parsed.shippedAt ? new Date(parsed.shippedAt) : undefined,
+                deliveredAt: parsed.deliveredAt ? new Date(parsed.deliveredAt) : undefined,
+                cancelledAt: parsed.cancelledAt ? new Date(parsed.cancelledAt) : undefined,
+                statusHistory: parsed.statusHistory?.map((h: any) => ({
+                  ...h,
+                  date: new Date(h.date)
+                }))
+              }
+              currentOrder.value = restoredOrder
+              return restoredOrder
+            }
+          } catch (e) {
+            console.error('Failed to parse saved order', e)
+          }
+        }
+      }
+      
       error.value = err instanceof Error ? err.message : 'Failed to fetch order'
       console.error('Error fetching order:', err)
       return null
@@ -338,7 +368,7 @@ export const useOrdersStore = defineStore('orders', () => {
     }
   }
 
-  // ========== CORRECTED createOrder ==========
+  // ========== FIXED createOrder (no undefined fields) ==========
   const createOrder = async (
     shippingAddress: ShippingAddress,
     paymentMethod: PaymentMethod = 'cash_on_delivery',
@@ -355,11 +385,11 @@ export const useOrdersStore = defineStore('orders', () => {
     try {
       const newOrder = await runTransaction(db, async (transaction) => {
         const orderNumber = generateOrderNumber()
-        const guestId = !authStore.isAuthenticated ? generateGuestId() : undefined
-
+        const isAuthenticated = authStore.isAuthenticated
+        const guestId = !isAuthenticated ? generateGuestId() : undefined
         const currentUserId = getCurrentUserId()
         const currentUserEmail = getCurrentUserEmail()
-        const currentUserName = getCurrentUserName() // used in statusHistory
+        const currentUserName = getCurrentUserName()
 
         const orderItems: OrderItem[] = cartStore.items.map(item => {
           const product = productsStore.products.find(p => p.id === item.id)
@@ -384,8 +414,7 @@ export const useOrdersStore = defineStore('orders', () => {
         const tax = cartStore.tax || Math.round(subtotal * 0.14)
         const total = subtotal + shipping + tax
 
-        // Use currentUserName if available, else fallback to currentUserId or 'customer'/'guest'
-        const updatedByName = authStore.isAuthenticated 
+        const updatedByName = isAuthenticated 
           ? (currentUserName || currentUserId || 'customer')
           : 'guest'
 
@@ -396,14 +425,11 @@ export const useOrdersStore = defineStore('orders', () => {
           updatedBy: updatedByName
         }]
 
-        // Convert shippingAddress object to a string for legacy field
         const shippingAddressString = `${shippingAddress.address}, ${shippingAddress.city}, ${shippingAddress.country || 'Egypt'}`
 
-        const orderData: Omit<FirestoreOrder, 'id'> = {
+        // Build order data dynamically to avoid undefined fields
+        const orderData: any = {
           orderNumber,
-          userId: currentUserId ?? undefined, // ensure null -> undefined
-          guestId: guestId, // string | undefined
-          userEmail: currentUserEmail || shippingAddress.email,
           customer: {
             name: shippingAddress.name,
             email: shippingAddress.email,
@@ -428,8 +454,23 @@ export const useOrdersStore = defineStore('orders', () => {
             note: h.note,
             updatedBy: h.updatedBy
           })),
-          createdAt: serverTimestamp() as any,
-          updatedAt: serverTimestamp() as any
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        }
+
+        // Add userId only if authenticated
+        if (isAuthenticated && currentUserId) {
+          orderData.userId = currentUserId
+        }
+
+        // Add guestId only if not authenticated
+        if (!isAuthenticated && guestId) {
+          orderData.guestId = guestId
+        }
+
+        // Add userEmail only if authenticated and available
+        if (isAuthenticated && currentUserEmail) {
+          orderData.userEmail = currentUserEmail
         }
 
         const ordersCollection = collection(db, 'orders')
@@ -466,7 +507,7 @@ export const useOrdersStore = defineStore('orders', () => {
         deliveredAt: undefined,
         cancelledAt: undefined,
         userId: newOrder.userId ?? undefined,
-        guestId: newOrder.guestId ?? undefined // ensure null -> undefined
+        guestId: newOrder.guestId ?? undefined
       }
 
       orders.value = [createdOrder, ...orders.value]
@@ -479,12 +520,8 @@ export const useOrdersStore = defineStore('orders', () => {
         localStorage.setItem('last_order_email', createdOrder.customer.email)
         localStorage.setItem('last_order_number', createdOrder.orderNumber)
 
-        sessionStorage.setItem('last_created_order', JSON.stringify({
-          id: createdOrder.id,
-          guestId: createdOrder.guestId,
-          email: createdOrder.customer.email,
-          orderNumber: createdOrder.orderNumber
-        }))
+        // Save full order to sessionStorage for guest access (to bypass permission issues)
+        sessionStorage.setItem('last_created_order', JSON.stringify(createdOrder))
       }
 
       authNotification.loggedIn(`Order #${createdOrder.orderNumber} placed successfully`)

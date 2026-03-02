@@ -109,8 +109,11 @@ export const useAuthStore = defineStore('auth', () => {
         updatedAt: data.updatedAt?.toDate?.() || new Date(),
         lastLogin: new Date()
       }
-    } catch (err) {
-      console.error('❌ Error getting super-admin from Firestore:', err)
+    } catch (err: any) {
+      // Only log errors that are not permission-denied
+      if (err.code !== 'permission-denied') {
+        console.error('❌ Error getting super-admin from Firestore:', err)
+      }
       return null
     }
   }
@@ -134,12 +137,21 @@ export const useAuthStore = defineStore('auth', () => {
           newsletter: false
         }
         
-        // Save to Firestore
-        await setDoc(doc(db, 'customers', firebaseUser.uid), {
-          ...newCustomer,
+        // Save to Firestore - clean undefined values
+        const customerData: any = {
+          uid: newCustomer.uid,
+          email: newCustomer.email,
+          displayName: newCustomer.displayName,
           createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        })
+          updatedAt: serverTimestamp(),
+          addresses: newCustomer.addresses,
+          wishlist: newCustomer.wishlist,
+          newsletter: newCustomer.newsletter
+        }
+        if (newCustomer.photoURL) customerData.photoURL = newCustomer.photoURL
+        if (newCustomer.phoneNumber) customerData.phoneNumber = newCustomer.phoneNumber
+        
+        await setDoc(doc(db, 'customers', firebaseUser.uid), customerData)
         
         return newCustomer
       }
@@ -150,6 +162,7 @@ export const useAuthStore = defineStore('auth', () => {
         email: firebaseUser.email || '',
         displayName: data.displayName || firebaseUser.displayName || '',
         photoURL: data.photoURL || firebaseUser.photoURL || undefined,
+        phoneNumber: data.phoneNumber,
         addresses: data.addresses || [],
         wishlist: data.wishlist || [],
         newsletter: data.newsletter || false,
@@ -163,98 +176,103 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Admin Login action (only super-admin)
-  const login = async (email: string, password: string): Promise<AdminUser> => {
+  // Private helper to set admin user and session
+  const setAdminUser = (adminData: AdminUser) => {
+    user.value = adminData
+    customer.value = null
+    lastLogin.value = new Date()
+    sessionExpiry.value = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24h session
+    localStorage.setItem('luxury_admin_session', JSON.stringify({
+      user: adminData,
+      expiry: sessionExpiry.value.getTime(),
+      timestamp: Date.now()
+    }))
+  }
+
+  // Private helper to set customer user and session
+  const setCustomerUser = (customerData: CustomerUser, remember?: boolean) => {
+    customer.value = customerData
+    user.value = null
+    lastLogin.value = new Date()
+    const sessionDuration = remember ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000
+    sessionExpiry.value = new Date(Date.now() + sessionDuration)
+    localStorage.setItem('luxury_customer_session', JSON.stringify({
+      user: customerData,
+      expiry: sessionExpiry.value.getTime(),
+      timestamp: Date.now()
+    }))
+  }
+
+  // Unified login: authenticates and determines role
+  const authenticate = async (credentials: { email: string; password: string; remember?: boolean }) => {
     isLoading.value = true
     error.value = null
-    try {
-      console.log('🔐 Attempting super-admin login:', email)
-      const userCredential = await signInWithEmailAndPassword(auth, email, password)
-      const firebaseUser = userCredential.user
-      const adminData = await getSuperAdminFromFirestore(firebaseUser)
 
-      if (!adminData) {
-        throw new Error('Access denied: not a super-admin')
+    try {
+      console.log('🔐 Authenticating user:', credentials.email)
+      const userCredential = await signInWithEmailAndPassword(auth, credentials.email, credentials.password)
+      const firebaseUser = userCredential.user
+
+      // Check admin and customer collections in parallel
+      const [adminData, customerData] = await Promise.all([
+        getSuperAdminFromFirestore(firebaseUser),
+        getCustomerFromFirestore(firebaseUser)
+      ])
+
+      if (adminData) {
+        setAdminUser(adminData)
+        await updateDoc(doc(db, 'admins', firebaseUser.uid), { lastLogin: serverTimestamp() })
+        authNotification.loggedIn(adminData.displayName)
+        console.log('✅ Admin authenticated:', adminData.email)
+        return { ...adminData, role: 'admin' }
       }
 
-      // Update lastLogin in Firestore
-      await updateDoc(doc(db, 'admins', firebaseUser.uid), { lastLogin: serverTimestamp() })
+      if (customerData) {
+        setCustomerUser(customerData, credentials.remember)
+        await updateDoc(doc(db, 'customers', firebaseUser.uid), { 
+          lastLogin: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        })
+        authNotification.loggedIn(customerData.displayName || 'Customer')
+        console.log('✅ Customer authenticated:', customerData.email)
+        return { ...customerData, role: 'customer' }
+      }
 
-      user.value = adminData
-      customer.value = null // Clear any customer data
-      lastLogin.value = new Date()
-      sessionExpiry.value = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24h session
-
-      localStorage.setItem('luxury_admin_session', JSON.stringify({
-        user: user.value,
-        expiry: sessionExpiry.value.getTime(),
-        timestamp: Date.now()
-      }))
-
-      authNotification.loggedIn(user.value.displayName)
-      console.log('✅ Super-admin authenticated:', user.value.email)
-      return user.value
+      // If neither admin nor customer, treat as customer? Maybe auto-create? But should not happen.
+      throw new Error('User profile not found')
     } catch (err: any) {
-      console.error('❌ Super-admin login error:', err)
+      console.error('❌ Authentication error:', err)
       error.value = err.message || 'Invalid credentials'
-      authNotification.error(error.value || 'Login failed')
+      authNotification.error(error.value)
       throw err
     } finally {
       isLoading.value = false
     }
   }
 
-  // Customer Login action
-  const customerLogin = async (credentials: { email: string; password: string; remember?: boolean }): Promise<CustomerUser> => {
-    isLoading.value = true
-    error.value = null
+  // Admin Login action (only super-admin) – kept for backward compatibility
+  const login = async (email: string, password: string): Promise<AdminUser> => {
     try {
-      console.log('🔐 Attempting customer login:', credentials.email)
-      const userCredential = await signInWithEmailAndPassword(auth, credentials.email, credentials.password)
-      const firebaseUser = userCredential.user
-      
-      // Check if this is actually an admin (prevent admins from logging in as customers)
-      const adminData = await getSuperAdminFromFirestore(firebaseUser)
-      if (adminData) {
+      const result = await authenticate({ email, password, remember: false })
+      if (result.role !== 'admin') {
+        throw new Error('Access denied: not a super-admin')
+      }
+      return result as AdminUser
+    } catch (err) {
+      throw err
+    }
+  }
+
+  // Customer Login action – kept for backward compatibility
+  const customerLogin = async (credentials: { email: string; password: string; remember?: boolean }): Promise<CustomerUser> => {
+    try {
+      const result = await authenticate(credentials)
+      if (result.role !== 'customer') {
         throw new Error('Please use admin login portal')
       }
-
-      const customerData = await getCustomerFromFirestore(firebaseUser)
-
-      if (!customerData) {
-        throw new Error('Failed to load customer profile')
-      }
-
-      // Update lastLogin in Firestore
-      await updateDoc(doc(db, 'customers', firebaseUser.uid), { 
-        lastLogin: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      })
-
-      customer.value = customerData
-      user.value = null // Clear any admin data
-      lastLogin.value = new Date()
-      
-      // Set session expiry based on remember me
-      const sessionDuration = credentials.remember ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000 // 30 days or 24 hours
-      sessionExpiry.value = new Date(Date.now() + sessionDuration)
-
-      localStorage.setItem('luxury_customer_session', JSON.stringify({
-        user: customer.value,
-        expiry: sessionExpiry.value.getTime(),
-        timestamp: Date.now()
-      }))
-
-      authNotification.loggedIn(customerData.displayName || 'Customer')
-      console.log('✅ Customer authenticated:', customer.value.email)
-      return customer.value
-    } catch (err: any) {
-      console.error('❌ Customer login error:', err)
-      error.value = err.message || 'Invalid credentials'
-      authNotification.error(error.value || 'Login failed')
+      return result as CustomerUser
+    } catch (err) {
       throw err
-    } finally {
-      isLoading.value = false
     }
   }
 
@@ -291,12 +309,22 @@ export const useAuthStore = defineStore('auth', () => {
         lastLogin: new Date()
       }
 
-      // Save to Firestore
-      await setDoc(doc(db, 'customers', firebaseUser.uid), {
-        ...newCustomer,
+      // Prepare Firestore data – omit undefined fields
+      const firestoreData: any = {
+        uid: newCustomer.uid,
+        email: newCustomer.email,
+        displayName: newCustomer.displayName,
+        addresses: newCustomer.addresses,
+        wishlist: newCustomer.wishlist,
+        newsletter: newCustomer.newsletter,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-      })
+      }
+      if (newCustomer.photoURL) firestoreData.photoURL = newCustomer.photoURL
+      if (newCustomer.phoneNumber) firestoreData.phoneNumber = newCustomer.phoneNumber
+
+      // Save to Firestore
+      await setDoc(doc(db, 'customers', firebaseUser.uid), firestoreData)
 
       customer.value = newCustomer
       user.value = null
@@ -591,7 +619,6 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       // This would typically upload to Firebase Storage
       // For now, we'll return a placeholder
-      // FIXED: showInfo expects two arguments (title, message)
       showInfo('Info', 'Photo upload functionality coming soon')
       return ''
     } catch (err: any) {
@@ -763,11 +790,22 @@ export const useAuthStore = defineStore('auth', () => {
         updatedAt: new Date(),
         lastLogin: new Date()
       }
-      await setDoc(doc(db, 'admins', firebaseUser.uid), {
-        ...adminData,
+
+      // Prepare Firestore data – omit undefined fields
+      const firestoreData: any = {
+        uid: adminData.uid,
+        email: adminData.email,
+        displayName: adminData.displayName,
+        role: adminData.role,
+        isActive: adminData.isActive,
+        permissions: adminData.permissions,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-      })
+      }
+      if (adminData.photoURL) firestoreData.photoURL = adminData.photoURL
+
+      await setDoc(doc(db, 'admins', firebaseUser.uid), firestoreData)
+
       console.log('✅ Super-admin created:', adminData.email)
       return adminData
     } catch (err: any) {
@@ -880,6 +918,7 @@ export const useAuthStore = defineStore('auth', () => {
     
     // Customer Actions
     customerLogin,
+    authenticate,  // <-- new unified login
     customerRegister,
     updateCustomerProfile,
     changeCustomerPassword,

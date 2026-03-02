@@ -47,11 +47,25 @@
 
     <!-- Main Content - Only show when authenticated and loaded -->
     <template v-else-if="customer">
-      <!-- Header -->
+      <!-- Header with Back Button -->
       <div class="bg-gradient-to-r from-primary-900 to-primary-700 text-white py-8 px-4 sm:px-6 lg:px-8">
         <div class="max-w-7xl mx-auto">
-          <h1 class="text-2xl sm:text-3xl font-bold font-['Cormorant_Garamond']">{{ t('myAccount') }}</h1>
-          <p class="mt-2 text-primary-100">{{ t('welcomeBack') }}, {{ customer.displayName || t('customer') }}</p>
+          <div class="flex items-center space-x-4">
+            <button
+              @click="goBack"
+              class="flex items-center text-white hover:text-gold-200 transition-colors"
+              aria-label="Go back"
+            >
+              <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              <span class="text-sm">{{ t('back') }}</span>
+            </button>
+            <div>
+              <h1 class="text-2xl sm:text-3xl font-bold font-['Cormorant_Garamond']">{{ t('myAccount') }}</h1>
+              <p class="mt-2 text-primary-100">{{ t('welcomeBack') }}, {{ customer.displayName || t('customer') }}</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -156,6 +170,19 @@
 
           <!-- Main Content Area -->
           <div class="lg:col-span-3">
+            <!-- Shop Now Call-to-Action -->
+            <div class="mb-6">
+              <router-link
+                to="/shop"
+                class="inline-flex items-center px-6 py-3 bg-gold-500 text-white rounded-lg hover:bg-gold-600 transition-colors shadow-md"
+              >
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                {{ t('shopNow') }}
+              </router-link>
+            </div>
+
             <!-- Stats Grid -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
               <div class="bg-white rounded-lg shadow p-6">
@@ -320,6 +347,10 @@ const userInitials = computed(() => {
 const wishlistTotal = computed(() => wishlistStore.totalItems)
 
 // Methods
+const goBack = () => {
+  router.back()
+}
+
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-EG').format(amount)
 }
@@ -367,7 +398,7 @@ const loadUserData = async () => {
   try {
     // Load recent orders
     await ordersStore.fetchOrders({
-      userId: customer.value.uid, // Changed from id to uid
+      userId: customer.value.uid,
       limit: 5
     })
     recentOrders.value = ordersStore.orders.slice(0, 5)

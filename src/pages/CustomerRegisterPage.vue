@@ -203,12 +203,13 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useLanguageStore } from '@/stores/language'
 import { authNotification } from '@/utils/notifications'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const { t } = useLanguageStore()
 
@@ -239,20 +240,19 @@ const handleRegister = async () => {
   loading.value = true
 
   try {
-    // Use the customerRegister method from auth store
     const customer = await authStore.customerRegister({
       email: form.email,
       password: form.password,
       displayName: `${form.firstName} ${form.lastName}`,
-      phoneNumber: form.phone // Changed from 'phone' to 'phoneNumber'
+      phoneNumber: form.phone
     })
 
     if (customer) {
-      // Use loggedIn method for success notification
       authNotification.loggedIn(customer.displayName || t('customer'))
       
-      // Redirect to account page
-      router.push('/account')
+      // Redirect to the page they were trying to access (e.g., checkout) or fallback to account
+      const redirectTo = route.query.redirect as string || '/account'
+      router.push(redirectTo)
     }
   } catch (error: any) {
     console.error('Registration error:', error)
@@ -264,6 +264,8 @@ const handleRegister = async () => {
       authNotification.error(t('weakPassword'))
     } else if (error.code === 'auth/invalid-email') {
       authNotification.error(t('invalidEmail'))
+    } else if (error.code === 'auth/network-request-failed') {
+      authNotification.error(t('networkError') || 'Network error. Please check your internet connection.')
     } else {
       authNotification.error(error.message || t('registrationFailed'))
     }

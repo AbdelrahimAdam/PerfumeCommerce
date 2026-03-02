@@ -1,17 +1,29 @@
 <!-- src/pages/OrdersPage.vue -->
 <template>
   <div class="orders-page min-h-screen bg-gray-50">
-    <!-- Header -->
+    <!-- Header with Back Button -->
     <div class="bg-gradient-to-r from-primary-900 to-primary-700 text-white py-8 px-4 sm:px-6 lg:px-8 sticky top-0 z-10 shadow-lg">
       <div class="max-w-7xl mx-auto">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="flex items-center space-x-4">
+          <button
+            @click="goBack"
+            class="flex items-center text-white hover:text-gold-200 transition-colors"
+            aria-label="Go back"
+          >
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            <span class="text-sm">{{ t('back') }}</span>
+          </button>
           <div>
             <h1 class="text-2xl sm:text-3xl font-bold font-['Cormorant_Garamond']">{{ t('My Orders') }}</h1>
             <p class="mt-2 text-primary-100 text-sm sm:text-base">{{ t('Track and manage your perfume orders') }}</p>
           </div>
-          
-          <!-- Search Bar - Desktop -->
-          <div class="hidden sm:block relative">
+        </div>
+        
+        <!-- Search Bar - Desktop (moved to align right) -->
+        <div class="hidden sm:block absolute right-8 top-8">
+          <div class="relative">
             <input
               v-model="searchQuery"
               type="text"
@@ -400,6 +412,10 @@ const totalPages = computed(() =>
 )
 
 // Methods
+const goBack = () => {
+  router.back()
+}
+
 const viewOrder = (order: any) => {
   selectedOrder.value = order
 }

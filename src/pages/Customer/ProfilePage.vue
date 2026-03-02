@@ -1,11 +1,27 @@
 <!-- src/pages/Customer/ProfilePage.vue -->
 <template>
   <div class="profile-page min-h-screen bg-gray-50">
-    <!-- Header -->
+    <!-- Header with Back Button -->
     <div class="bg-gradient-to-r from-primary-900 to-primary-700 text-white py-8 px-4 sm:px-6 lg:px-8">
       <div class="max-w-7xl mx-auto">
-        <h1 class="text-2xl sm:text-3xl font-bold font-['Cormorant_Garamond']">{{ t('profileSettings') }}</h1>
-        <p class="mt-2 text-primary-100">{{ t('managePersonalInfo') }}</p>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-4">
+            <button
+              @click="goBack"
+              class="flex items-center text-white hover:text-gold-200 transition-colors"
+              aria-label="Go back"
+            >
+              <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              <span class="text-sm">{{ t('back') }}</span>
+            </button>
+            <div>
+              <h1 class="text-2xl sm:text-3xl font-bold font-['Cormorant_Garamond']">{{ t('profileSettings') }}</h1>
+              <p class="mt-2 text-primary-100">{{ t('managePersonalInfo') }}</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -186,7 +202,7 @@
           <div class="border-t border-gray-200 pt-6 flex justify-end space-x-3">
             <button
               type="button"
-              @click="resetForm"
+              @click="goBack"
               class="px-6 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               {{ t('cancel') }}
@@ -240,8 +256,8 @@ const passwordForm = reactive({
 
 // Computed
 const userInitials = computed(() => {
-  if (!authStore.user?.displayName) return 'U'
-  return authStore.user.displayName
+  if (!authStore.customer?.displayName) return 'U'
+  return authStore.customer.displayName
     .split(' ')
     .map((n: string) => n[0])
     .join('')
@@ -250,6 +266,10 @@ const userInitials = computed(() => {
 })
 
 // Methods
+const goBack = () => {
+  router.back()
+}
+
 const triggerFileUpload = () => {
   fileInput.value?.click()
 }
@@ -274,6 +294,8 @@ const handleSubmit = async () => {
     })
     
     showSuccess(t('profileUpdated'), '')
+    // Optionally go back after successful save
+    goBack()
   } catch (error) {
     showError(t('updateFailed'), '')
   } finally {
@@ -300,24 +322,20 @@ const changePassword = async () => {
   }
 }
 
-const resetForm = () => {
-  loadUserData()
-}
-
 const loadUserData = () => {
-  const user = authStore.user
-  if (!user) return
+  const customer = authStore.customer
+  if (!customer) return
   
-  const nameParts = user.displayName?.split(' ') || ['', '']
+  const nameParts = customer.displayName?.split(' ') || ['', '']
   form.firstName = nameParts[0] || ''
   form.lastName = nameParts.slice(1).join(' ') || ''
-  form.email = user.email || ''
-  form.phoneNumber = (user as any).phoneNumber || '' // phoneNumber may not be on AdminUser; we cast to any
+  form.email = customer.email || ''
+  form.phoneNumber = customer.phoneNumber || ''
   // Load other preferences from database (to be implemented)
 }
 
 onMounted(() => {
-  // Redirect if not authenticated
+  // Redirect if not authenticated as customer
   if (!authStore.isCustomer) {
     router.push('/login')
     return

@@ -284,7 +284,6 @@ export const useHomepageStore = defineStore('homepage', () => {
     try {
       checkPermission()
       isLoading.value = true
-      // Explicitly type resetData as HomepageData to preserve literal types (source: 'default')
       const resetData: HomepageData = {
         ...defaultLocalData,
         lastUpdated: new Date().toISOString(),

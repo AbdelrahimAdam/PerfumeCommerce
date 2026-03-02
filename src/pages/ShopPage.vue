@@ -41,6 +41,20 @@
 
       <!-- Main Content -->
       <template v-else>
+        <!-- Header with Back Button -->
+        <div class="flex items-center gap-4 mb-4">
+          <button
+            @click="goBack"
+            class="flex items-center text-gray-600 hover:text-primary-600 transition-colors"
+            aria-label="Go back"
+          >
+            <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            <span class="text-sm">{{ safeLang === 'en' ? 'Back' : 'رجوع' }}</span>
+          </button>
+        </div>
+
         <!-- Breadcrumb -->
         <nav class="flex items-center text-sm text-gray-600 mb-8" 
              :class="{ 'flex-row-reverse': isRTL }">
@@ -627,6 +641,10 @@ const activeFilters = computed(() => {
 })
 
 // Methods
+const goBack = () => {
+  router.back()
+}
+
 const toggleMobileFilters = () => {
   showMobileFilters.value = !showMobileFilters.value
 }

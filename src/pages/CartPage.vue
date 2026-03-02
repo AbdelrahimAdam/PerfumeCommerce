@@ -6,16 +6,16 @@
     />
 
     <div class="container">
-      <!-- Header with back button for mobile -->
+      <!-- Header with back button for all devices -->
       <div class="cart-header">
-        <button class="back-button" @click="goBack" :class="{ 'mobile-only': true }">
+        <button class="back-button" @click="goBack">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
           </svg>
           <span>{{ t('Back') }}</span>
         </button>
         <h1 class="page-title">{{ t('Shopping Cart') }}</h1>
-        <div class="header-spacer desktop-only"></div>
+        <div class="header-spacer"></div>
       </div>
 
       <!-- Loading State -->
@@ -283,9 +283,18 @@ const proceedToCheckout = () => {
   router.push('/checkout')
 }
 
-// Go back to previous page
+// Go back to previous page with fallback based on auth status
 const goBack = () => {
-  router.back()
+  if (window.history.length > 1) {
+    router.back()
+  } else {
+    // Fallback based on authentication
+    if (authStore.isAuthenticated) {
+      router.push('/account')
+    } else {
+      router.push('/shop')
+    }
+  }
 }
 
 // Initialize cart on mount
@@ -1027,6 +1036,7 @@ onMounted(() => {
   display: none;
 }
 
+/* ===== MOBILE OPTIMIZATIONS ===== */
 @media (max-width: 768px) {
   .desktop-only {
     display: none;
@@ -1049,6 +1059,40 @@ onMounted(() => {
     width: 100%;
     justify-content: center;
   }
+
+  /* Adjust font sizes for better readability on small screens */
+  .page-title {
+    font-size: 1.8rem;
+  }
+
+  .summary-label {
+    font-size: 0.7rem;
+  }
+
+  .summary-value {
+    font-size: 1rem;
+  }
+
+  .order-summary h2 {
+    font-size: 1.3rem;
+  }
+
+  .summary-row {
+    font-size: 0.9rem;
+  }
+
+  .total-value {
+    font-size: 1.2rem;
+  }
+
+  .checkout-btn {
+    font-size: 0.9rem;
+    padding: 1rem;
+  }
+
+  .guarantee-item {
+    font-size: 0.8rem;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1063,11 +1107,11 @@ onMounted(() => {
   }
   
   .summary-label {
-    font-size: 0.7rem;
+    font-size: 0.6rem;
   }
   
   .summary-value {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
   }
   
   .cart-items-list {
@@ -1079,25 +1123,71 @@ onMounted(() => {
   }
   
   .summary-row {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
   }
   
   .total-value {
-    font-size: 1.2rem;
+    font-size: 1.1rem;
   }
   
   .checkout-btn {
-    padding: 1rem;
-    font-size: 0.9rem;
-    min-height: 48px;
+    padding: 0.9rem;
+    font-size: 0.85rem;
+    min-height: 44px;
   }
   
   .payment-icons span {
-    font-size: 1.25rem;
+    font-size: 1.1rem;
   }
   
   .guarantee-item {
-    font-size: 0.85rem;
+    font-size: 0.75rem;
+  }
+
+  .progress-info {
+    font-size: 0.8rem;
+  }
+
+  .progress-text {
+    font-size: 0.75rem;
+  }
+
+  .progress-labels {
+    font-size: 0.65rem;
+  }
+
+  .free-shipping-badge {
+    font-size: 0.9rem;
+    padding: 0.75rem;
+  }
+}
+
+/* Extra small screens */
+@media (max-width: 360px) {
+  .page-title {
+    font-size: 1.5rem;
+  }
+
+  .back-button {
+    padding: 0.5rem 0.8rem;
+    font-size: 0.8rem;
+  }
+
+  .back-button svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .summary-value {
+    font-size: 0.8rem;
+  }
+
+  .summary-label {
+    font-size: 0.55rem;
+  }
+
+  .total-value {
+    font-size: 1rem;
   }
 }
 
