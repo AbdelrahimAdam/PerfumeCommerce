@@ -222,7 +222,8 @@ export const useAuthStore = defineStore('auth', () => {
       if (adminData) {
         setAdminUser(adminData)
         await updateDoc(doc(db, 'admins', firebaseUser.uid), { lastLogin: serverTimestamp() })
-        authNotification.loggedIn(adminData.displayName || 'Admin')
+        // Fixed: nullish coalescing to ensure string
+        authNotification.loggedIn(adminData.displayName ?? 'Admin')
         console.log('✅ Admin authenticated:', adminData.email)
         return { ...adminData, role: 'admin' }
       }
@@ -233,7 +234,8 @@ export const useAuthStore = defineStore('auth', () => {
           lastLogin: serverTimestamp(),
           updatedAt: serverTimestamp()
         })
-        authNotification.loggedIn(customerData.displayName || 'Customer')
+        // Fixed: nullish coalescing to ensure string
+        authNotification.loggedIn(customerData.displayName ?? 'Customer')
         console.log('✅ Customer authenticated:', customerData.email)
         return { ...customerData, role: 'customer' }
       }
@@ -918,7 +920,7 @@ export const useAuthStore = defineStore('auth', () => {
     
     // Customer Actions
     customerLogin,
-    authenticate,  // <-- new unified login
+    authenticate,
     customerRegister,
     updateCustomerProfile,
     changeCustomerPassword,
