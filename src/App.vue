@@ -1,10 +1,5 @@
 <template>
   <div id="vue-app" :class="[isRTL ? 'rtl' : 'ltr', appClasses]" class="min-h-screen-mobile">
-    <!-- Skip to main content for accessibility -->
-    <a v-if="routeLayout !== 'admin'" href="#main-content" class="skip-to-content">
-      {{ safeTranslate('skipToContent') }}
-    </a>
-    
     <!-- SEO Head Component -->
     <SEOHead />
     
@@ -405,7 +400,7 @@ import SEOHead from '@/components/UI/SEOHead.vue'
 import LuxuryHeader from '@/components/Layout/LuxuryHeader.vue'
 import LuxuryFooter from '@/components/Layout/LuxuryFooter.vue'
 import LuxuryCartSidebar from '@/components/Cart/LuxuryCartSidebar.vue'
-import LuxurySearchModal from '@/components/search/SearchModal.vue' // ✅ Fixed casing
+import LuxurySearchModal from '@/components/search/SearchModal.vue'
 import LuxuryNotificationCenter from '@/components/UI/LuxuryNotificationCenter.vue'
 import AdminSidebar from '@/components/Admin/AdminSidebar.vue'
 
@@ -428,7 +423,8 @@ const scrollY = ref(0)
 const isMobile = ref(false)
 const fontsLoaded = ref(false)
 const prefersReducedMotion = ref(false)
-const headerHeight = ref(72) // Optimized default (64px mobile, 80px desktop)
+// Actual header heights from LuxuryHeader: 69px desktop, 53px mobile
+const headerHeight = ref(window.innerWidth < 768 ? 53 : 69)
 
 // Admin state
 const isMobileMenuOpen = ref(false)
@@ -750,12 +746,11 @@ const updateHeaderHeight = () => {
   const header = document.querySelector('.luxury-header')
   if (header) {
     const height = header.clientHeight
-    // Optimize header height: 64px mobile, 80px desktop
-    headerHeight.value = window.innerWidth < 768 ? Math.max(64, height) : Math.max(80, height)
-    document.documentElement.style.setProperty('--header-height', `${headerHeight.value}px`)
+    headerHeight.value = height
+    document.documentElement.style.setProperty('--header-height', `${height}px`)
   } else {
-    // Set optimized defaults
-    headerHeight.value = window.innerWidth < 768 ? 64 : 80
+    // Fallback to known values
+    headerHeight.value = window.innerWidth < 768 ? 53 : 69
     document.documentElement.style.setProperty('--header-height', `${headerHeight.value}px`)
   }
 }
@@ -903,8 +898,8 @@ const handleEscapeKey = (event: KeyboardEvent) => {
 
 // Lifecycle
 onMounted(async () => {
-  // Set initial header height with optimized defaults
-  headerHeight.value = window.innerWidth < 768 ? 64 : 80
+  // Set initial header height with known values
+  headerHeight.value = window.innerWidth < 768 ? 53 : 69
   document.documentElement.style.setProperty('--header-height', `${headerHeight.value}px`)
   
   // Mark body as loaded to hide preloader
@@ -1006,7 +1001,7 @@ watch(() => isRTL.value, () => {
 })
 
 // Watch route changes
-watch(() => route.path, (_newPath) => { // renamed to _newPath to avoid unused variable error
+watch(() => route.path, (_newPath) => {
   updatePageTitle()
   
   // Close admin dropdowns on route change
@@ -1042,9 +1037,9 @@ watch(() => route.path, (_newPath) => { // renamed to _newPath to avoid unused v
 /* ========== GLOBAL STYLES - OPTIMIZED SPACING ========== */
 /* CSS Variables - Optimized */
 :root {
-  --header-height: 72px;
-  --header-height-mobile: 64px;
-  --header-height-desktop: 80px;
+  --header-height: 69px;
+  --header-height-mobile: 53px;
+  --header-height-desktop: 69px;
   --content-spacing-mobile: 1rem;
   --content-spacing-tablet: 1.5rem;
   --content-spacing-desktop: 2rem;
@@ -1315,26 +1310,7 @@ p {
 }
 
 /* ========== ACCESSIBILITY ========== */
-.skip-to-content {
-  position: absolute;
-  top: -40px;
-  inset-inline-start: 0;
-  background: #d4af37;
-  color: #ffffff;
-  padding: 8px 12px;
-  text-decoration: none;
-  font-weight: 600;
-  border-radius: 0 0 4px 0;
-  z-index: 10000;
-  transition: top 0.2s ease;
-  font-size: 14px;
-}
-
-.skip-to-content:focus {
-  top: var(--safe-area-inset-top, 0);
-  outline: 2px solid #ffffff;
-  outline-offset: -2px;
-}
+/* Removed skip link */
 
 /* Reduced Motion Support */
 @media (prefers-reduced-motion: reduce) {
