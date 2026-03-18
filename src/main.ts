@@ -188,10 +188,12 @@ vueApp.use(router)
 vueApp.use(VueFire, { firebaseApp }) // using renamed import
 vueApp.use(i18n)
 
-// Mount app
+// Mount app – but wait for tenant resolution if needed
+// We'll mount after async initialization (similar to original setTimeout)
+// But to keep original behavior, we'll mount immediately and initialize later.
+
 vueApp.mount('#app')
 
-// Log app info
 console.log('🚀 Luxury Perfume Store v1.0.0')
 console.log('🌐 Languages: English & Arabic')
 console.log('🔥 Firebase: Connected')
@@ -200,6 +202,20 @@ console.log('🔥 Firebase: Connected')
 setTimeout(async () => {
   try {
     console.log('🏪 Starting store initialization...')
+    
+    // First, resolve tenant from domain
+    const { useTenantStore } = await import('@/stores/tenant')
+    const tenantStore = useTenantStore()
+    await tenantStore.resolveTenantFromDomain()
+    
+    if (tenantStore.error) {
+      console.error('❌ Tenant resolution failed:', tenantStore.error)
+      // Optionally redirect to a "tenant not found" page
+      // router.replace('/tenant-not-found')
+      // return
+    } else {
+      console.log(`🌍 Tenant resolved: ${tenantStore.tenantId} (${tenantStore.tenantDomain})`)
+    }
     
     // Check if current page is public
     const currentPath = window.location.pathname
@@ -224,7 +240,6 @@ setTimeout(async () => {
     const languageStore = useLanguageStore()
     
     console.log('🔄 Initializing language store...')
-    // Language store only has initialize method
     await languageStore.initialize()
     
     // Only check auth on protected pages
@@ -247,16 +262,16 @@ setTimeout(async () => {
     console.log('🛒 Restoring cart...')
     cartStore.restoreCart?.()
     
-    // Log initialization status (simplified)
+    // Log initialization status
     console.log('✅ All stores initialized successfully')
     console.log(`  👤 Auth: ${authStore.isAuthenticated ? 'Logged in' : 'Guest'}`)
     console.log(`  📁 Brands: ${brandsStore.brands?.length || 0}`)
     console.log(`  📦 Products: ${productsStore.products?.length || 0}`)
-    console.log(`  🛒 Cart Items: ${cartStore.items?.length || 0}`) // changed from cartItems to items
+    console.log(`  🛒 Cart Items: ${cartStore.items?.length || 0}`)
     console.log(`  🌐 Language: ${languageStore.currentLanguage}`)
     
     // Check if we need sample data (only in development)
-    if ((import.meta as any).env.DEV) { // type assertion to avoid ImportMeta error
+    if ((import.meta as any).env.DEV) {
       const brandsCount = brandsStore.brands?.length || 0
       const productsCount = productsStore.products?.length || 0
       
@@ -314,7 +329,7 @@ window.addEventListener('error', (event) => {
   console.error('🌍 Global error:', event.message)
 })
 
-window.addEventListener('unhandledrejection', (_event) => { // renamed to _event to avoid unused variable warning
+window.addEventListener('unhandledrejection', (_event) => {
   console.error('🌍 Unhandled promise rejection')
 })
 
@@ -323,7 +338,7 @@ vueApp.config.errorHandler = (err) => {
 }
 
 // Development mode
-if ((import.meta as any).env.DEV) { // type assertion to avoid ImportMeta error
+if ((import.meta as any).env.DEV) {
   console.log('🔧 Development mode enabled')
   
   // Expose stores for debugging on protected pages

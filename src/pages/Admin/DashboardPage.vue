@@ -271,15 +271,23 @@
     />
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useLanguageStore } from '@/stores/language'
 import { useHomepageStore } from '@/stores/homepage'
+import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 import AddOfferModal from '@/components/Admin/AddOfferModal.vue'
 
+const router = useRouter()
 const languageStore = useLanguageStore()
 const homepageStore = useHomepageStore()
+const authStore = useAuthStore()
+
+// ✅ Admin guard
+if (!authStore.isAdmin) {
+  router.push('/admin')
+}
 
 const { t, formatDate } = languageStore
 

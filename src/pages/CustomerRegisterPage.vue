@@ -158,11 +158,11 @@
             </label>
           </div>
 
-          <!-- Submit Button -->
+          <!-- Submit Button with improved contrast -->
           <button
             type="submit"
             :disabled="!!(loading || !form.terms || passwordMismatch)"
-            class="w-full py-4 bg-gradient-to-r from-gold-500 to-gold-600 text-white rounded-xl font-bold shadow-gold-lg hover:shadow-gold-xl transition-all duration-300 hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+            class="w-full py-4 bg-gradient-to-r from-amber-600 to-amber-700 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
             <span v-if="!loading">{{ t('createAccount') }}</span>
             <div v-else class="flex items-center justify-center">
@@ -190,6 +190,18 @@
           </p>
         </form>
       </div>
+
+      <!-- ========== NEW: Company Registration CTA ========== -->
+      <div class="mt-8 text-center border-t border-gray-200 pt-6">
+        <p class="text-sm text-gray-600 mb-4">{{ t('wantToSell') || 'Want to sell on our platform?' }}</p>
+        <router-link
+          to="/register-company"
+          class="inline-block w-full sm:w-auto px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-md"
+        >
+          {{ t('registerCompany') || 'Register your company' }}
+        </router-link>
+      </div>
+      <!-- ================================================= -->
 
       <!-- Social Proof -->
       <div class="mt-8 text-center">

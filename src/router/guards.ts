@@ -17,7 +17,8 @@ const publicRoutes = [
   'contact',
   'about',
   'wishlist',
-  'not-found'
+  'not-found',
+  'register-company'          // <-- NEW: company registration page
 ]
 
 // List of admin routes that require authentication

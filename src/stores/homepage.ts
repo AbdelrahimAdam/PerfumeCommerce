@@ -9,8 +9,8 @@ import { useAuthStore } from '@/stores/auth'
 
 interface HeroBanner {
   imageUrl: string
-  linkText?: string      // optional, falls back to translation
-  linkUrl?: string        // optional, defaults to '/shop'
+  linkText?: string
+  linkUrl?: string
 }
 
 interface Offer {
@@ -25,7 +25,7 @@ interface Offer {
   linkUrl?: string
   startDate?: string
   endDate?: string
-  offerType: string      // 'percentage', 'fixed', 'bundle', 'free-shipping', 'buy-one-get-one'
+  offerType: string
   terms?: string
   active?: boolean
 }
@@ -50,6 +50,7 @@ interface HomepageData {
     description: string
   }
   settings: Settings
+  tenantId?: string
   lastUpdated?: string
   source?: 'firebase' | 'cache' | 'default'
 }
@@ -92,6 +93,7 @@ export const useHomepageStore = defineStore('homepage', () => {
       isDarkMode: false,
       defaultLanguage: 'ar'
     },
+    tenantId: authStore.currentTenant,
     lastUpdated: new Date().toISOString(),
     source: 'default'
   }
@@ -111,8 +113,8 @@ export const useHomepageStore = defineStore('homepage', () => {
 
   // =================== HELPERS ===================
   const checkPermission = (): boolean => {
-    if (authStore.user?.role !== 'super-admin') {
-      throw new Error('Permission denied: Only super admin can modify homepage')
+    if (!authStore.isAdmin) {
+      throw new Error('Permission denied: Only admin can modify homepage')
     }
     return true
   }
@@ -147,11 +149,17 @@ export const useHomepageStore = defineStore('homepage', () => {
     listeners.forEach(cb => cb(data))
   }
 
-  // =================== FIREBASE LISTENER ===================
+  // =================== FIREBASE LISTENER (tenant‑specific) ===================
   const setupFirebaseListener = async (): Promise<void> => {
+    // If no tenant, we cannot listen to Firestore (no document ID)
+    if (!authStore.currentTenant) {
+      console.warn('No tenant ID – cannot setup homepage listener')
+      return
+    }
+
     if (unsubscribe) return
     try {
-      const homepageRef = doc(db, 'homepage', 'content_v2')
+      const homepageRef = doc(db, 'homepage', authStore.currentTenant)
       unsubscribe = onSnapshot(homepageRef, (docSnap) => {
         if (docSnap.exists()) {
           const firebaseData = docSnap.data() as HomepageData
@@ -166,7 +174,9 @@ export const useHomepageStore = defineStore('homepage', () => {
           error.value = ''
           isListening.value = true
         } else {
-          initializeFirebaseData()
+          // Document does not exist – we could optionally create it for admins,
+          // but for public users we just keep default/cached data.
+          console.log('Homepage document missing for tenant', authStore.currentTenant)
           isListening.value = true
         }
       }, (err) => {
@@ -179,11 +189,18 @@ export const useHomepageStore = defineStore('homepage', () => {
   }
 
   const initializeFirebaseData = async (): Promise<boolean> => {
+    // This should only be called by admins, and only when tenant exists
+    if (!authStore.currentTenant) {
+      error.value = 'No tenant – cannot initialize homepage data'
+      return false
+    }
+
     try {
       checkPermission()
-      const homepageRef = doc(db, 'homepage', 'content_v2')
+      const homepageRef = doc(db, 'homepage', authStore.currentTenant)
       await setDoc(homepageRef, {
         ...homepageData,
+        tenantId: authStore.currentTenant,
         lastUpdated: new Date().toISOString(),
         source: 'firebase'
       })
@@ -212,17 +229,29 @@ export const useHomepageStore = defineStore('homepage', () => {
         notifyListeners(cachedData)
       }
 
-      await setupFirebaseListener()
+      // Only attempt Firestore if tenant exists
+      if (authStore.currentTenant) {
+        await setupFirebaseListener()
 
-      const homepageRef = doc(db, 'homepage', 'content_v2')
-      const docSnap = await getDoc(homepageRef)
-      if (docSnap.exists()) {
-        const firebaseData = docSnap.data() as HomepageData
-        Object.assign(homepageData, { ...firebaseData, source: 'firebase' })
-        saveToCache(homepageData)
-        notifyListeners(homepageData)
+        const homepageRef = doc(db, 'homepage', authStore.currentTenant)
+        const docSnap = await getDoc(homepageRef)
+        if (docSnap.exists()) {
+          const firebaseData = docSnap.data() as HomepageData
+          Object.assign(homepageData, { ...firebaseData, source: 'firebase' })
+          saveToCache(homepageData)
+          notifyListeners(homepageData)
+        } else {
+          // No document yet – keep cached/default
+          saveToCache(homepageData)
+        }
       } else {
-        saveToCache(homepageData)
+        console.log('No tenant – using cached/default homepage data')
+        // Ensure we still have data (cached or default)
+        if (!cachedData) {
+          Object.assign(homepageData, defaultLocalData)
+          saveToCache(homepageData)
+          notifyListeners(homepageData)
+        }
       }
     } catch (err: any) {
       error.value = 'Failed to load homepage data'
@@ -237,17 +266,23 @@ export const useHomepageStore = defineStore('homepage', () => {
   }
 
   const updateHomepageData = async (updates: Partial<HomepageData>): Promise<boolean> => {
+    // Writes require both permission and a tenant
+    if (!authStore.currentTenant) {
+      throw new Error('No tenant – cannot update homepage')
+    }
+
     try {
       checkPermission()
       isLoading.value = true
 
-      const homepageRef = doc(db, 'homepage', 'content_v2')
+      const homepageRef = doc(db, 'homepage', authStore.currentTenant)
       const docSnap = await getDoc(homepageRef)
       const currentData = docSnap.exists() ? docSnap.data() as HomepageData : { ...homepageData }
 
       const newData: HomepageData = {
         ...currentData,
         ...updates,
+        tenantId: authStore.currentTenant,
         lastUpdated: new Date().toISOString(),
         source: 'firebase'
       }
@@ -281,11 +316,17 @@ export const useHomepageStore = defineStore('homepage', () => {
   }
 
   const resetToDefaults = async (): Promise<boolean> => {
+    if (!authStore.currentTenant) {
+      error.value = 'No tenant – cannot reset'
+      return false
+    }
+
     try {
       checkPermission()
       isLoading.value = true
       const resetData: HomepageData = {
         ...defaultLocalData,
+        tenantId: authStore.currentTenant,
         lastUpdated: new Date().toISOString(),
         source: 'default'
       }
@@ -304,8 +345,12 @@ export const useHomepageStore = defineStore('homepage', () => {
   }
 
   const checkConnection = async (): Promise<{ connected: boolean; lastUpdate?: string }> => {
+    if (!authStore.currentTenant) {
+      return { connected: false }
+    }
+
     try {
-      const docSnap = await getDoc(doc(db, 'homepage', 'content_v2'))
+      const docSnap = await getDoc(doc(db, 'homepage', authStore.currentTenant))
       return {
         connected: true,
         lastUpdate: docSnap.exists() ? (docSnap.data() as HomepageData).lastUpdated : undefined

@@ -13,7 +13,7 @@ import {
   startAfter,
   QueryConstraint,
   QueryDocumentSnapshot
-} from 'firebase/firestore'  // removed startAt
+} from 'firebase/firestore'
 import { ref as storageRef, getDownloadURL, listAll } from 'firebase/storage'
 import { db, storage } from '@/firebase/config'
 import type { Product, FilterOptions, Brand } from '@/types'
@@ -21,6 +21,7 @@ import { useLocalStorage } from '@vueuse/core'
 import { productNotification } from '@/utils/notifications'
 import { LUXURY_CATEGORIES } from '@/utils/luxuryConstants'
 import { useBrandsStore } from './brands'
+import { useAuthStore } from './auth'
 
 // Extend FilterOptions locally to include classification (gender)
 type ExtendedFilterOptions = FilterOptions & {
@@ -29,6 +30,7 @@ type ExtendedFilterOptions = FilterOptions & {
 
 export const useProductsStore = defineStore('products', () => {
   const brandsStore = useBrandsStore()
+  const authStore = useAuthStore()
 
   /* =========================
    * STATE
@@ -47,7 +49,7 @@ export const useProductsStore = defineStore('products', () => {
   // Pagination state
   const lastDoc = ref<QueryDocumentSnapshot | null>(null)
   const hasMore = ref(true)
-  const pageSize = 24 // Amazon-like pagination (multiples of 12)
+  const pageSize = 24
 
   // Search & Filter state
   const filters = useLocalStorage<FilterOptions>('luxury_product_filters', {})
@@ -209,7 +211,6 @@ export const useProductsStore = defineStore('products', () => {
             size: data.size || '100ml',
             concentration: data.concentration || 'Eau de Parfum',
             classification: data.classification || '',
-            // ✅ Include sku field
             sku: data.sku || '',
             imageUrl: imageUrl,
             images: images,
@@ -220,6 +221,7 @@ export const useProductsStore = defineStore('products', () => {
             notes: data.notes || { top: [], heart: [], base: [] },
             inStock: data.inStock !== false,
             stockQuantity: data.stockQuantity || 0,
+            tenantId: data.tenantId,
             createdAt: data.createdAt || { seconds: Date.now() / 1000, nanoseconds: 0 },
             updatedAt: data.updatedAt || { seconds: Date.now() / 1000, nanoseconds: 0 },
             meta: {
@@ -228,7 +230,7 @@ export const useProductsStore = defineStore('products', () => {
               origin: data.meta?.origin || brand.name,
               ...data.meta
             }
-          } as Product // Type assertion to bypass missing `stockQuantity` in Product interface
+          } as Product
 
           // Cache the product
           productCache.value.set(cacheKey, product)
@@ -254,6 +256,18 @@ export const useProductsStore = defineStore('products', () => {
    * Smart product fetching with intelligent brand selection
    */
   const fetchProducts = async (options: FilterOptions = {}, resetPagination: boolean = true) => {
+    // If no tenant is resolved, we cannot fetch any products.
+    if (!authStore.currentTenant) {
+      console.warn('No tenant ID – cannot fetch products')
+      products.value = []
+      featuredProducts.value = []
+      newArrivals.value = []
+      luxuryCollections.value = []
+      bestSellerProducts.value = []
+      hasMore.value = false
+      return
+    }
+
     if (isLoading.value) return
 
     isLoading.value = true
@@ -274,15 +288,25 @@ export const useProductsStore = defineStore('products', () => {
         await brandsStore.loadBrands()
       }
 
-      // Determine which brands to fetch from
-      let brandsToFetch = brandsStore.activeBrands
+      // Determine which brands to fetch from – only those belonging to current tenant
+      let brandsToFetch = brandsStore.activeBrands.filter(
+        brand => brand.tenantId === authStore.currentTenant
+      )
       
       // Filter by brand if specified
       if (options.brand) {
-        const brand = brandsStore.activeBrands.find(
+        const brand = brandsToFetch.find(
           b => b.slug === options.brand || b.name === options.brand
         )
         brandsToFetch = brand ? [brand] : []
+      }
+
+      // If no brands to fetch, we are done
+      if (brandsToFetch.length === 0) {
+        products.value = []
+        hasMore.value = false
+        lastUpdated.value = new Date()
+        return
       }
 
       // Fetch products from each relevant brand in parallel with limits
@@ -322,8 +346,8 @@ export const useProductsStore = defineStore('products', () => {
       // Cache to localStorage for offline support
       cacheProducts(uniqueProducts)
 
-      // Fetch special collections in background
-      if (resetPagination) {
+      // Fetch special collections in background (only if we have a tenant)
+      if (resetPagination && authStore.currentTenant) {
         Promise.all([
           fetchFeaturedProducts(),
           fetchNewArrivals(),
@@ -351,10 +375,20 @@ export const useProductsStore = defineStore('products', () => {
    * ========================= */
   
   const fetchFeaturedProducts = async () => {
+    // If no tenant, clear and return early
+    if (!authStore.currentTenant) {
+      featuredProducts.value = []
+      return
+    }
+
     try {
       const featuredProductsList: Product[] = []
       
-      for (const brand of brandsStore.activeBrands.slice(0, 8)) { // Limit brands for performance
+      const tenantFilteredBrands = brandsStore.activeBrands.filter(
+        brand => brand.tenantId === authStore.currentTenant
+      )
+      
+      for (const brand of tenantFilteredBrands.slice(0, 8)) { // Limit brands for performance
         try {
           const productsRef = collection(db, 'brands', brand.id, 'products')
           const featuredQuery = query(
@@ -370,7 +404,6 @@ export const useProductsStore = defineStore('products', () => {
           const brandFeatured = await Promise.all(
             snapshot.docs.map(async (docSnap) => {
               const data = docSnap.data()
-              
               const product = await transformProductData(docSnap, brand, data)
               return product
             })
@@ -385,7 +418,7 @@ export const useProductsStore = defineStore('products', () => {
       }
       
       featuredProducts.value = featuredProductsList
-        .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)) // Handle undefined rating
+        .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
         .slice(0, 12)
         
     } catch (err: any) {
@@ -397,11 +430,20 @@ export const useProductsStore = defineStore('products', () => {
   }
 
   const fetchNewArrivals = async () => {
+    if (!authStore.currentTenant) {
+      newArrivals.value = []
+      return
+    }
+
     try {
       const oneMonthAgo = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60)
       const newArrivalsList: Product[] = []
       
-      for (const brand of brandsStore.activeBrands.slice(0, 6)) {
+      const tenantFilteredBrands = brandsStore.activeBrands.filter(
+        brand => brand.tenantId === authStore.currentTenant
+      )
+      
+      for (const brand of tenantFilteredBrands.slice(0, 6)) {
         try {
           const productsRef = collection(db, 'brands', brand.id, 'products')
           const newArrivalsQuery = query(
@@ -448,10 +490,19 @@ export const useProductsStore = defineStore('products', () => {
   }
 
   const fetchBestSellers = async () => {
+    if (!authStore.currentTenant) {
+      bestSellerProducts.value = []
+      return
+    }
+
     try {
       const bestSellersList: Product[] = []
       
-      for (const brand of brandsStore.activeBrands.slice(0, 8)) {
+      const tenantFilteredBrands = brandsStore.activeBrands.filter(
+        brand => brand.tenantId === authStore.currentTenant
+      )
+      
+      for (const brand of tenantFilteredBrands.slice(0, 8)) {
         try {
           const productsRef = collection(db, 'brands', brand.id, 'products')
           const bestSellersQuery = query(
@@ -493,10 +544,19 @@ export const useProductsStore = defineStore('products', () => {
   }
 
   const fetchLuxuryCollections = async () => {
+    if (!authStore.currentTenant) {
+      luxuryCollections.value = []
+      return
+    }
+
     try {
       const luxuryProductsList: Product[] = []
       
-      for (const brand of brandsStore.activeBrands) {
+      const tenantFilteredBrands = brandsStore.activeBrands.filter(
+        brand => brand.tenantId === authStore.currentTenant
+      )
+      
+      for (const brand of tenantFilteredBrands) {
         try {
           const productsRef = collection(db, 'brands', brand.id, 'products')
           const luxuryQuery = query(
@@ -543,6 +603,11 @@ export const useProductsStore = defineStore('products', () => {
    * ========================= */
   
   const fetchProductBySlug = async (slug: string) => {
+    if (!authStore.currentTenant) {
+      error.value = 'No tenant context'
+      return null
+    }
+
     if (isLoading.value) return null
 
     isLoading.value = true
@@ -562,8 +627,12 @@ export const useProductsStore = defineStore('products', () => {
       let product = products.value.find(p => p.slug === slug)
       
       if (!product) {
-        // Search across all brands
-        for (const brand of brandsStore.brands) {
+        // Search across all brands of current tenant
+        const tenantFilteredBrands = brandsStore.brands.filter(
+          brand => brand.tenantId === authStore.currentTenant
+        )
+        
+        for (const brand of tenantFilteredBrands) {
           try {
             const productsRef = collection(db, 'brands', brand.id, 'products')
             const productQuery = query(
@@ -615,6 +684,7 @@ export const useProductsStore = defineStore('products', () => {
     try {
       const brand = brandsStore.brands.find(b => b.slug === brandSlug)
       if (!brand) return []
+      if (brand.tenantId !== authStore.currentTenant) return []
 
       // Check cache
       const cached = brandProductsCache.value.get(brand.id)
@@ -659,8 +729,12 @@ export const useProductsStore = defineStore('products', () => {
     let product = products.value.find(p => p.id === id)
     
     if (!product) {
-      // Search across all brands
-      for (const brand of brandsStore.brands) {
+      // Search across all brands of current tenant
+      const tenantFilteredBrands = brandsStore.brands.filter(
+        brand => brand.tenantId === authStore.currentTenant
+      )
+      
+      for (const brand of tenantFilteredBrands) {
         try {
           const productDoc = await getDoc(doc(db, 'brands', brand.id, 'products', id))
           if (productDoc.exists()) {
@@ -683,7 +757,7 @@ export const useProductsStore = defineStore('products', () => {
    * ========================= */
   
   const filterProducts = (options: FilterOptions): Product[] => {
-    const opts = options as ExtendedFilterOptions // Include classification
+    const opts = options as ExtendedFilterOptions
     let filtered = [...products.value]
 
     // Text search
@@ -721,7 +795,7 @@ export const useProductsStore = defineStore('products', () => {
       filtered = filtered.filter(p => p.price <= options.maxPrice!)
     }
 
-    // Filter by rating – FIXED undefined handling
+    // Filter by rating
     if (options.minRating !== undefined) {
       filtered = filtered.filter(p => (p.rating ?? 0) >= options.minRating!)
     }
@@ -954,9 +1028,7 @@ export const useProductsStore = defineStore('products', () => {
       originalPrice: Number(data.originalPrice) || Number(data.price) || 0,
       size: data.size || '100ml',
       concentration: data.concentration || 'Eau de Parfum',
-      // NEW: classification field
       classification: data.classification || '',
-      // ✅ Include sku field
       sku: data.sku || '',
       imageUrl: imageUrl,
       images: images,
@@ -967,6 +1039,7 @@ export const useProductsStore = defineStore('products', () => {
       notes: data.notes || { top: [], heart: [], base: [] },
       inStock: data.inStock !== false,
       stockQuantity: data.stockQuantity || 0,
+      tenantId: data.tenantId,
       createdAt: data.createdAt || { seconds: Date.now() / 1000, nanoseconds: 0 },
       updatedAt: data.updatedAt || { seconds: Date.now() / 1000, nanoseconds: 0 },
       meta: {
@@ -975,7 +1048,7 @@ export const useProductsStore = defineStore('products', () => {
         origin: data.meta?.origin || brand.name,
         ...data.meta
       }
-    } as Product // Type assertion to bypass missing `stockQuantity` in Product interface
+    } as Product
 
     // Cache the product
     productCache.value.set(cacheKey, product)
@@ -986,7 +1059,7 @@ export const useProductsStore = defineStore('products', () => {
   const cacheProducts = (products: Product[]) => {
     try {
       const cacheData = {
-        products: products.slice(0, 100), // Cache only first 100 for performance
+        products: products.slice(0, 100),
         timestamp: Date.now(),
         version: '1.0'
       }
@@ -1068,12 +1141,15 @@ export const useProductsStore = defineStore('products', () => {
    * ========================= */
   
   const initialize = async () => {
-    if (products.value.length === 0) {
+    // Only fetch if there is a tenant and products are empty
+    if (authStore.currentTenant && products.value.length === 0) {
       await fetchProducts({}, true)
     }
   }
 
-  // Auto-initialize on store creation
+  // Auto-initialize on store creation, but only after tenant is resolved.
+  // Since tenant resolution happens in main.ts before app mount, by the time this store is used,
+  // tenant should be available. If not, we skip fetching.
   initialize()
 
   return {

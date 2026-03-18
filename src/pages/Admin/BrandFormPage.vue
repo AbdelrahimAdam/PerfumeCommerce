@@ -431,14 +431,13 @@
     </div>
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useLanguageStore } from '@/stores/language'
 import { useBrandsStore } from '@/stores/brands'
 import { useProductsStore } from '@/stores/products'
-// Removed unused Brand type import
+import { useAuthStore } from '@/stores/auth'
 import type { Product } from '@/types'
 
 const route = useRoute()
@@ -446,6 +445,12 @@ const router = useRouter()
 const languageStore = useLanguageStore()
 const brandsStore = useBrandsStore()
 const productsStore = useProductsStore()
+const authStore = useAuthStore()
+
+// ✅ Admin guard
+if (!authStore.isAdmin) {
+  router.push('/admin')
+}
 
 const { t } = languageStore
 
@@ -681,7 +686,6 @@ onMounted(() => {
   initializeForm()
 })
 </script>
-
 <style scoped>
 .shadow-luxury {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);

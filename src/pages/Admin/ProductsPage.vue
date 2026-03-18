@@ -649,13 +649,14 @@
     />
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useLanguageStore } from '@/stores/language'
 import { useProductsStore } from '@/stores/products'
 import { useBrandsStore } from '@/stores/brands'
+import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 import ProductFormModal from '@/components/Admin/ProductForm.vue'
 import type { Product, Category, Brand } from '@/types'
 import { authNotification } from '@/utils/notifications'
@@ -663,9 +664,16 @@ import debounce from 'lodash/debounce'
 import { collection, doc, writeBatch, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/firebase/config'
 
+const router = useRouter()
 const languageStore = useLanguageStore()
 const productsStore = useProductsStore()
 const brandsStore = useBrandsStore()
+const authStore = useAuthStore()
+
+// ✅ Admin guard
+if (!authStore.isAdmin) {
+  router.push('/admin')
+}
 
 // Use storeToRefs for reactive refs
 const { currentLanguage, isRTL } = storeToRefs(languageStore)

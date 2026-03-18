@@ -136,6 +136,7 @@ export const useOrdersStore = defineStore('orders', () => {
     id: firestoreOrder.id,
     userId: firestoreOrder.userId ?? undefined,
     guestId: firestoreOrder.guestId ?? undefined,
+    tenantId: firestoreOrder.tenantId,
     createdAt: (firestoreOrder.createdAt as Timestamp)?.toDate?.() || new Date(),
     updatedAt: (firestoreOrder.updatedAt as Timestamp)?.toDate?.() || new Date(),
     shippedAt: (firestoreOrder.shippedAt as Timestamp)?.toDate?.() || undefined,
@@ -187,7 +188,10 @@ export const useOrdersStore = defineStore('orders', () => {
 
     try {
       const ordersCollection = collection(db, 'orders')
-      const constraints: any[] = [orderBy('createdAt', 'desc')]
+      const constraints: any[] = [
+        where('tenantId', '==', authStore.currentTenant),  // added
+        orderBy('createdAt', 'desc')
+      ]
 
       const currentUserId = getCurrentUserId()
       const isAdmin = authStore.isAdmin
@@ -207,7 +211,7 @@ export const useOrdersStore = defineStore('orders', () => {
         constraints.push(where('customer.email', '==', options.email))
       }
       else if (options?.all && isAdmin) {
-        // No user filter – fetch all
+        // No user filter – fetch all within tenant
       }
       else if (authStore.isCustomer && currentUserId) {
         constraints.push(where('userId', '==', currentUserId))
@@ -265,6 +269,12 @@ export const useOrdersStore = defineStore('orders', () => {
 
       if (docSnapshot.exists()) {
         const data = docSnapshot.data() as FirestoreOrder
+        // Verify tenant
+        if (data.tenantId !== authStore.currentTenant) {
+          error.value = 'Order not found in current tenant'
+          return null
+        }
+
         const currentUserId = getCurrentUserId()
 
         if (authStore.isAdmin) {
@@ -344,6 +354,7 @@ export const useOrdersStore = defineStore('orders', () => {
       const ordersCollection = collection(db, 'orders')
       const q = query(
         ordersCollection,
+        where('tenantId', '==', authStore.currentTenant),  // added
         where('orderNumber', '==', orderNumber),
         where('customer.email', '==', email)
       )
@@ -376,6 +387,13 @@ export const useOrdersStore = defineStore('orders', () => {
   ) => {
     if (cartStore.items.length === 0) {
       authNotification.error('Your cart is empty')
+      return null
+    }
+
+    // Guard: tenant must be resolved
+    if (!authStore.currentTenant) {
+      error.value = 'Tenant not resolved – cannot create order'
+      authNotification.error('Unable to place order: missing tenant context')
       return null
     }
 
@@ -454,6 +472,7 @@ export const useOrdersStore = defineStore('orders', () => {
             note: h.note,
             updatedBy: h.updatedBy
           })),
+          tenantId: authStore.currentTenant,  // added
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         }
@@ -501,6 +520,7 @@ export const useOrdersStore = defineStore('orders', () => {
       const createdOrder: Order = {
         ...newOrder,
         id: newOrder.id,
+        tenantId: authStore.currentTenant,
         createdAt: new Date(),
         updatedAt: new Date(),
         shippedAt: undefined,
@@ -554,18 +574,21 @@ export const useOrdersStore = defineStore('orders', () => {
       if (guestId) {
         q = query(
           ordersCollection,
+          where('tenantId', '==', authStore.currentTenant),  // added
           where('guestId', '==', guestId),
           orderBy('createdAt', 'desc')
         )
       } else if (guestEmail) {
         q = query(
           ordersCollection,
+          where('tenantId', '==', authStore.currentTenant),  // added
           where('customer.email', '==', guestEmail),
           orderBy('createdAt', 'desc')
         )
       } else if (guestOrderNumber) {
         q = query(
           ordersCollection,
+          where('tenantId', '==', authStore.currentTenant),  // added
           where('orderNumber', '==', guestOrderNumber),
           orderBy('createdAt', 'desc')
         )
@@ -620,6 +643,10 @@ export const useOrdersStore = defineStore('orders', () => {
       }
 
       const orderData = orderSnapshot.data() as FirestoreOrder
+      if (orderData.tenantId !== authStore.currentTenant) {
+        throw new Error('Order does not belong to this tenant')
+      }
+
       const order = convertTimestampsToDates({ id: orderSnapshot.id, ...orderData })
 
       if (order.status === status) {
@@ -740,6 +767,11 @@ export const useOrdersStore = defineStore('orders', () => {
     loading.value = true
     try {
       const orderDoc = doc(db, 'orders', orderId)
+      // Verify tenant
+      const orderSnap = await getDoc(orderDoc)
+      if (orderSnap.exists() && orderSnap.data().tenantId !== authStore.currentTenant) {
+        throw new Error('Order not in current tenant')
+      }
       await updateDoc(orderDoc, { 
         paymentStatus, 
         updatedAt: serverTimestamp() 

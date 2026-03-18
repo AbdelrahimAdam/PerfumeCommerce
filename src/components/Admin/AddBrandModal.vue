@@ -634,7 +634,6 @@
     </div>
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref, reactive, watch, computed, onMounted } from 'vue'
 import type { ComponentPublicInstance } from 'vue' // ✅ Import for ref typing
@@ -724,7 +723,6 @@ const brandImageBase64 = ref<string>('')
 const brandImageFile = ref<File | null>(null)
 
 // Products array with base64 images and classification (gender)
-// Use a type that includes optional imageBase64 and required classification for templates
 type ProductWithTemp = Partial<Product> & {
   imageBase64?: string;
   classification?: string; // 'M' | 'F' | 'U'
@@ -1267,13 +1265,14 @@ const saveBrandAndProducts = async () => {
     return
   }
   
-  if (!authStore.isSuperAdmin) {
-    console.log('❌ Not super admin')
-    alert(t('Only super-admins can manage brands and products'))
+  // 🔁 REPLACED SUPER-ADMIN CHECK WITH ADMIN CHECK
+  if (!authStore.isAdmin) {
+    console.log('❌ Not admin')
+    alert(t('You must be logged in as an admin to perform this action'))
     return
   }
   
-  console.log('🔐 User authenticated as super admin')
+  console.log('🔐 User authenticated as admin')
   
   if (!validateForm()) {
     console.log('❌ Form validation failed')
@@ -1427,7 +1426,7 @@ const saveBrandAndProducts = async () => {
     console.error('❌ Error saving brand and products:', error)
     
     if (error.message?.includes('permission') || error.message?.includes('Missing or insufficient')) {
-      alert(t('Permission denied. Please check if you have super-admin privileges.'))
+      alert(t('Permission denied. Please check if you have admin privileges.'))
     } else if (error.message?.includes('longer than 1048487 bytes')) {
       alert(t('Image file is too large. Please use smaller images (under 100KB each).'))
     } else if (error.message?.includes('already exists')) {

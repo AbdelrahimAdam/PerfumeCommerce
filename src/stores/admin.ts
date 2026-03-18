@@ -2,8 +2,11 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { AdminService } from '@/services/adminService'
 import type { AdminUser, CreateAdminDto, UpdateAdminDto } from '@/types/admin'
+import { useAuthStore } from './auth'
 
 export const useAdminStore = defineStore('admin', () => {
+  const authStore = useAuthStore()
+
   const admins = ref<AdminUser[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -14,19 +17,18 @@ export const useAdminStore = defineStore('admin', () => {
     inactiveAdmins: 0
   })
 
-  // Fetch all admins
+  // Fetch all admins for the current tenant
   const fetchAdmins = async () => {
     loading.value = true
     error.value = null
     try {
-      const adminList = await AdminService.getAdmins()
+      // Pass the current tenant ID to the service
+      const adminList = await AdminService.getAdmins(authStore.currentTenant)
       admins.value = adminList.map(admin => ({
         ...admin,
         createdAt: admin.createdAt || new Date().toISOString(),
         lastLoginAt: admin.lastLoginAt || new Date().toISOString()
       }))
-      
-      // Update stats
       updateStats()
     } catch (err: any) {
       error.value = err.message || 'Failed to fetch admins'
@@ -37,12 +39,16 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  // Create new admin
+  // Create new admin – include tenantId from current context
   const createAdmin = async (adminData: CreateAdminDto) => {
     loading.value = true
     error.value = null
     try {
-      const newAdmin = await AdminService.createAdmin(adminData)
+      const dataWithTenant = {
+        ...adminData,
+        tenantId: adminData.tenantId || authStore.currentTenant
+      }
+      const newAdmin = await AdminService.createAdmin(dataWithTenant)
       admins.value.unshift(newAdmin)
       updateStats()
       return newAdmin
@@ -61,16 +67,10 @@ export const useAdminStore = defineStore('admin', () => {
     error.value = null
     try {
       await AdminService.updateAdmin(uid, updateData)
-      
-      // Update local state
       const index = admins.value.findIndex(admin => admin.uid === uid)
       if (index !== -1) {
-        admins.value[index] = {
-          ...admins.value[index],
-          ...updateData
-        }
+        admins.value[index] = { ...admins.value[index], ...updateData }
       }
-      
       updateStats()
     } catch (err: any) {
       error.value = err.message || 'Failed to update admin'
@@ -87,8 +87,6 @@ export const useAdminStore = defineStore('admin', () => {
     error.value = null
     try {
       await AdminService.deleteAdmin(uid)
-      
-      // Remove from local state
       admins.value = admins.value.filter(admin => admin.uid !== uid)
       updateStats()
     } catch (err: any) {
@@ -115,20 +113,20 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  // Get admin stats
+  // Get admin stats for the current tenant
   const fetchAdminStats = async () => {
     try {
-      const adminStats = await AdminService.getAdminStats()
+      const adminStats = await AdminService.getAdminStats(authStore.currentTenant)
       stats.value = adminStats
     } catch (err: any) {
       console.error('Error fetching admin stats:', err)
     }
   }
 
-  // Search admins
+  // Search admins within the current tenant
   const searchAdmins = async (searchTerm: string) => {
     try {
-      return await AdminService.searchAdmins(searchTerm)
+      return await AdminService.searchAdmins(searchTerm, authStore.currentTenant)
     } catch (err: any) {
       console.error('Error searching admins:', err)
       return []
@@ -139,8 +137,6 @@ export const useAdminStore = defineStore('admin', () => {
   const updateLastLogin = async (uid: string) => {
     try {
       await AdminService.updateLastLogin(uid)
-      
-      // Update local state
       const index = admins.value.findIndex(admin => admin.uid === uid)
       if (index !== -1) {
         admins.value[index].lastLoginAt = new Date().toISOString()
@@ -166,13 +162,10 @@ export const useAdminStore = defineStore('admin', () => {
   }
 
   return {
-    // State
     admins,
     loading,
     error,
     stats,
-    
-    // Actions
     fetchAdmins,
     createAdmin,
     updateAdmin,

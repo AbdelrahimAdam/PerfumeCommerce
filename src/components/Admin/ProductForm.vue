@@ -1714,8 +1714,9 @@ const saveProduct = async () => {
     return
   }
 
-  if (!authStore.isSuperAdmin) {
-    alert(t('Only super-admins can manage products'))
+  // 🔁 REPLACED SUPER-ADMIN CHECK WITH ADMIN CHECK
+  if (!authStore.isAdmin) {
+    alert(t('You must be logged in as an admin to manage products'))
     return
   }
 
@@ -1810,6 +1811,7 @@ const saveProduct = async () => {
       const productsRef = collection(db, 'brands', brand.id, 'products')
       const productDocRef = doc(productsRef)
 
+      // ✅ FIX: Include tenantId in the product document (taken from the brand)
       const firestoreData = {
         name: productPayload.name,
         description: productPayload.description,
@@ -1829,6 +1831,7 @@ const saveProduct = async () => {
         brand: brand.name,
         brandSlug: brand.slug,
         brandId: brand.id,
+        tenantId: brand.tenantId,  // <-- ADDED
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       }
@@ -1884,7 +1887,7 @@ const saveProduct = async () => {
     if (error.message?.includes('SKU already exists')) {
       alert(error.message)
     } else if (error.message?.includes('permission') || error.message?.includes('Missing or insufficient')) {
-      alert(t('Permission denied. Please check if you have super-admin privileges.'))
+      alert(t('Permission denied. Please check if you have admin privileges.'))
     } else if (error.message?.includes('longer than 1048487 bytes')) {
       alert(t('Image file is too large. Please use smaller images (under 100KB each).'))
     } else {

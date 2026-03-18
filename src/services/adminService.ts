@@ -8,6 +8,7 @@ import {
   deleteDoc, 
   query, 
   orderBy,
+  where,
   serverTimestamp 
 } from 'firebase/firestore'
 import { 
@@ -22,11 +23,18 @@ const ADMIN_COLLECTION = 'admins'
 const USERS_COLLECTION = 'users'
 
 export class AdminService {
-  // Get all admins
-  static async getAdmins(): Promise<AdminUser[]> {
+  /**
+   * Get all admins – optionally filtered by tenantId
+   * @param tenantId - if provided, only admins of that tenant are returned
+   */
+  static async getAdmins(tenantId?: string): Promise<AdminUser[]> {
     try {
       const adminsRef = collection(db, ADMIN_COLLECTION)
-      const q = query(adminsRef, orderBy('createdAt', 'desc'))
+      let constraints = [orderBy('createdAt', 'desc')]
+      if (tenantId) {
+        constraints.unshift(where('tenantId', '==', tenantId))
+      }
+      const q = query(adminsRef, ...constraints)
       const snapshot = await getDocs(q)
       
       return snapshot.docs.map(doc => ({
@@ -39,7 +47,7 @@ export class AdminService {
     }
   }
 
-  // Get admin by ID
+  // Get admin by ID (no tenant filter – rules will enforce)
   static async getAdminById(uid: string): Promise<AdminUser | null> {
     try {
       const adminRef = doc(db, ADMIN_COLLECTION, uid)
@@ -55,7 +63,10 @@ export class AdminService {
     }
   }
 
-  // Create new admin
+  /**
+   * Create a new admin – requires tenantId
+   * @param adminData - includes email, password, displayName, role, and tenantId
+   */
   static async createAdmin(adminData: CreateAdminDto): Promise<AdminUser> {
     try {
       // 1. Create user in Firebase Auth
@@ -74,30 +85,31 @@ export class AdminService {
         })
       }
 
-      // 3. Create admin document in Firestore
+      // 3. Create admin document in Firestore with tenantId
       const adminRef = doc(db, ADMIN_COLLECTION, user.uid)
       
-      // Build document data with flexible type to include phoneNumber
-      const adminDataAny = adminData as any
       const adminDocData = {
         email: adminData.email,
         displayName: adminData.displayName || '',
         role: adminData.role || 'admin',
-        isActive: adminDataAny.isActive ?? true,
+        tenantId: adminData.tenantId,          // <-- ADDED
+        isActive: adminData.isActive ?? true,
         createdAt: serverTimestamp(),
         lastLoginAt: serverTimestamp(),
-        phoneNumber: adminDataAny.phoneNumber || ''
+        phoneNumber: adminData.phoneNumber || '',
+        permissions: adminData.permissions || []
       }
       
       await setDoc(adminRef, adminDocData)
 
-      // 4. Also add to users collection for consistency
+      // 4. Also add to users collection for consistency (include tenantId)
       const userRef = doc(db, USERS_COLLECTION, user.uid)
       await setDoc(userRef, {
         email: adminData.email,
         displayName: adminData.displayName || '',
         role: adminData.role || 'admin',
-        isActive: adminDataAny.isActive ?? true,
+        tenantId: adminData.tenantId,          // <-- ADDED
+        isActive: adminData.isActive ?? true,
         createdAt: serverTimestamp(),
         isAdmin: true
       }, { merge: true })
@@ -124,7 +136,7 @@ export class AdminService {
     }
   }
 
-  // Update admin
+  // Update admin (no tenant filter – rules will enforce)
   static async updateAdmin(uid: string, updateData: UpdateAdminDto): Promise<void> {
     try {
       const adminRef = doc(db, ADMIN_COLLECTION, uid)
@@ -138,15 +150,16 @@ export class AdminService {
       if (updateData.role !== undefined) {
         updatePayload.role = updateData.role
       }
-      if ((updateData as any).isActive !== undefined) {
-        updatePayload.isActive = (updateData as any).isActive
+      if (updateData.isActive !== undefined) {
+        updatePayload.isActive = updateData.isActive
       }
-      if ((updateData as any).phoneNumber !== undefined) {
-        updatePayload.phoneNumber = (updateData as any).phoneNumber
+      if (updateData.phoneNumber !== undefined) {
+        updatePayload.phoneNumber = updateData.phoneNumber
       }
-      if ((updateData as any).permissions !== undefined) {
-        updatePayload.permissions = (updateData as any).permissions
+      if (updateData.permissions !== undefined) {
+        updatePayload.permissions = updateData.permissions
       }
+      // tenantId should never be updated via this method
 
       // Update in admins collection
       await updateDoc(adminRef, updatePayload)
@@ -155,11 +168,11 @@ export class AdminService {
       await updateDoc(userRef, {
         displayName: updateData.displayName,
         role: updateData.role,
-        isActive: (updateData as any).isActive,
+        isActive: updateData.isActive,
         updatedAt: serverTimestamp()
       })
 
-      // Update displayName in Auth if provided
+      // Update displayName in Auth if provided and current user
       if (updateData.displayName && auth.currentUser?.uid === uid) {
         await updateProfile(auth.currentUser, {
           displayName: updateData.displayName
@@ -172,7 +185,7 @@ export class AdminService {
     }
   }
 
-  // Delete admin
+  // Delete admin (no tenant filter – rules will enforce)
   static async deleteAdmin(uid: string): Promise<void> {
     try {
       // Don't allow deletion of current user
@@ -199,7 +212,7 @@ export class AdminService {
     }
   }
 
-  // Reset admin password
+  // Reset admin password (no tenant filter)
   static async resetAdminPassword(email: string): Promise<void> {
     try {
       await sendPasswordResetEmail(auth, email)
@@ -214,15 +227,18 @@ export class AdminService {
     }
   }
 
-  // Get admin stats
-  static async getAdminStats(): Promise<{
+  /**
+   * Get admin stats for a specific tenant
+   * @param tenantId - filter by this tenant
+   */
+  static async getAdminStats(tenantId?: string): Promise<{
     total: number
     superAdmins: number
     activeAdmins: number
     inactiveAdmins: number
   }> {
     try {
-      const admins = await this.getAdmins()
+      const admins = await this.getAdmins(tenantId)  // pass tenantId
       
       return {
         total: admins.length,
@@ -236,15 +252,19 @@ export class AdminService {
     }
   }
 
-  // Search admins
-  static async searchAdmins(searchTerm: string): Promise<AdminUser[]> {
+  /**
+   * Search admins within a tenant
+   * @param searchTerm - term to search (email, displayName, phone)
+   * @param tenantId - optional tenant filter
+   */
+  static async searchAdmins(searchTerm: string, tenantId?: string): Promise<AdminUser[]> {
     try {
-      const admins = await this.getAdmins()
+      const admins = await this.getAdmins(tenantId)  // pass tenantId
       
       return admins.filter(admin => 
         admin.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
         admin.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (admin as any).phoneNumber?.includes(searchTerm)
+        admin.phoneNumber?.includes(searchTerm)
       )
     } catch (error) {
       console.error('Error searching admins:', error)
@@ -252,7 +272,7 @@ export class AdminService {
     }
   }
 
-  // Update last login timestamp
+  // Update last login timestamp (no tenant filter – document ID is known)
   static async updateLastLogin(uid: string): Promise<void> {
     try {
       const adminRef = doc(db, ADMIN_COLLECTION, uid)

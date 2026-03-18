@@ -1,3 +1,4 @@
+// src/stores/cart.ts
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { CartItem, Product } from '@/types'
@@ -9,9 +10,9 @@ import { showConfirmation } from '@/utils/confirmation'
 const CURRENCY = {
   code: 'EGP',
   symbol: 'LE ',
-  freeShippingThreshold: 5000, // 5000 EGP for free shipping
-  shippingRate: 150, // 150 EGP shipping
-  taxRate: 0.14 // 14% VAT (Egyptian standard)
+  freeShippingThreshold: 5000,
+  shippingRate: 150,
+  taxRate: 0.14
 }
 
 export const useCartStore = defineStore('cart', () => {
@@ -30,12 +31,10 @@ export const useCartStore = defineStore('cart', () => {
     items.value.reduce((sum, item) => sum + (item.price * item.quantity), 0)
   )
 
-  // Egyptian shipping - free over 5000 EGP
   const shipping = computed(() => 
     subtotal.value > CURRENCY.freeShippingThreshold ? 0 : CURRENCY.shippingRate
   )
 
-  // Egyptian VAT (14%)
   const tax = computed(() => 
     subtotal.value * CURRENCY.taxRate
   )
@@ -69,7 +68,6 @@ export const useCartStore = defineStore('cart', () => {
     }).format(price).replace(CURRENCY.code, CURRENCY.symbol)
   }
 
-  // Format price for display in notifications
   const formatPriceForDisplay = (price: number): string => {
     return formatPrice(price)
   }

@@ -257,6 +257,26 @@ export const routes: Array<RouteRecordRaw> = [
     }
   },
 
+  // ========== NEW: COMPANY REGISTRATION ROUTE ==========
+  {
+    path: '/register-company',
+    name: 'register-company',
+    component: () => import('@/pages/RegisterCompanyPage.vue'),
+    meta: {
+      title: {
+        en: 'Register Company | Luxury Perfume Store',
+        ar: 'تسجيل شركة | متجر العطور الفاخرة'
+      },
+      description: {
+        en: 'Create a new company account and become an administrator to manage your store.',
+        ar: 'أنشئ حساب شركة جديد وكن مسؤولاً لإدارة متجرك.'
+      },
+      requiresAuth: false,
+      isPublic: true,
+      layout: 'default'
+    }
+  },
+
   {
     path: '/forgot-password',
     name: 'forgot-password',

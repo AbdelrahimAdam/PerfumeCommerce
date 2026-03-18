@@ -458,11 +458,11 @@
     </div>
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLanguageStore } from '@/stores/language'
+import { useAuthStore } from '@/stores/auth'
 import { collection, getDocs, query, orderBy, limit, doc, deleteDoc } from 'firebase/firestore' // Removed startAfter
 import { db } from '@/firebase/config'
 import { showConfirmation } from '@/utils/confirmation'
@@ -492,6 +492,13 @@ const showNotification = (message: string, type: 'info' | 'success' | 'error' | 
 
 const router = useRouter()
 const languageStore = useLanguageStore()
+const authStore = useAuthStore()
+
+// ✅ Admin guard
+if (!authStore.isAdmin) {
+  router.push('/admin')
+}
+
 const { t } = languageStore
 
 // State

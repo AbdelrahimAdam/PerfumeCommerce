@@ -216,7 +216,6 @@
     </div>
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useHomepageStore } from '@/stores/homepage'
@@ -229,8 +228,8 @@ const languageStore = useLanguageStore()
 const authStore = useAuthStore()
 const router = useRouter()
 
-// Check if user is super admin
-if (authStore.user?.role !== 'super-admin') {
+// Check if user is admin (allow tenant admins to manage homepage)
+if (!authStore.isAdmin) {                // ✅ changed from isSuperAdmin
   router.push('/admin')
 }
 

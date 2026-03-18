@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { useHomepageStore } from './homepage' // Import homepage store
+import { useHomepageStore } from './homepage'
+import { useAuthStore } from './auth'  // added
 import {
   collection,
   doc,
@@ -26,11 +27,12 @@ export interface Offer {
   oldPrice: number
   newPrice: number
   linkUrl?: string
-  startDate?: string      // ISO date string (YYYY-MM-DD)
+  startDate?: string
   endDate?: string
-  offerType: string        // 'percentage', 'fixed', 'bundle', 'free-shipping', 'buy-one-get-one'
+  offerType: string
   terms?: string
   active: boolean
+  tenantId: string
   createdAt: Date
   updatedAt: Date
 }
@@ -52,8 +54,8 @@ export interface OfferInput {
 }
 
 export const useOffersStore = defineStore('offers', () => {
-  // Get homepage store instance
   const homepageStore = useHomepageStore()
+  const authStore = useAuthStore()  // added
   
   // State
   const offers = ref<Offer[]>([])
@@ -85,6 +87,7 @@ export const useOffersStore = defineStore('offers', () => {
       offerType: data.offerType || 'percentage',
       terms: data.terms,
       active: data.active !== false,
+      tenantId: data.tenantId,
       createdAt: data.createdAt?.toDate() || new Date(),
       updatedAt: data.updatedAt?.toDate() || new Date()
     }
@@ -107,6 +110,7 @@ export const useOffersStore = defineStore('offers', () => {
       offerType: offer.offerType || 'percentage',
       terms: offer.terms,
       active: offer.active !== false,
+      tenantId: authStore.currentTenant,
       createdAt: new Date(),
       updatedAt: new Date()
     }
@@ -148,14 +152,23 @@ export const useOffersStore = defineStore('offers', () => {
         return
       }
 
-      // Finally, fallback to Firebase
+      // Finally, fallback to Firebase – add tenant filter
       console.log('🔄 No offers in homepage, loading from Firebase...')
       const offersRef = collection(db, 'offers')
       let q
       if (onlyActive) {
-        q = query(offersRef, where('active', '==', true), orderBy('createdAt', 'desc'))
+        q = query(
+          offersRef,
+          where('tenantId', '==', authStore.currentTenant),  // added
+          where('active', '==', true),
+          orderBy('createdAt', 'desc')
+        )
       } else {
-        q = query(offersRef, orderBy('createdAt', 'desc'))
+        q = query(
+          offersRef,
+          where('tenantId', '==', authStore.currentTenant),  // added
+          orderBy('createdAt', 'desc')
+        )
       }
       const snapshot = await getDocs(q)
       offers.value = snapshot.docs.map(transformOffer)
@@ -199,9 +212,13 @@ export const useOffersStore = defineStore('offers', () => {
         }
       }
 
-      // If not found, try Firebase
+      // If not found, try Firebase – include tenant filter
       const offersRef = collection(db, 'offers')
-      const q = query(offersRef, where('slug', '==', slug))
+      const q = query(
+        offersRef,
+        where('slug', '==', slug),
+        where('tenantId', '==', authStore.currentTenant)  // added
+      )
       const snapshot = await getDocs(q)
 
       if (snapshot.empty) {
@@ -250,6 +267,13 @@ export const useOffersStore = defineStore('offers', () => {
         return null
       }
 
+      // Verify tenantId matches current tenant
+      const data = docSnap.data()
+      if (data.tenantId !== authStore.currentTenant) {
+        console.log('❌ Offer belongs to another tenant')
+        return null
+      }
+
       currentOffer.value = transformOffer(docSnap)
       console.log('✅ Offer found in Firebase by ID:', currentOffer.value.title)
       return currentOffer.value
@@ -286,7 +310,11 @@ export const useOffersStore = defineStore('offers', () => {
       // If not found, try Firebase by slug
       console.log('🔄 Not found in homepage, trying Firebase by slug...')
       const offersRef = collection(db, 'offers')
-      const slugQuery = query(offersRef, where('slug', '==', identifier))
+      const slugQuery = query(
+        offersRef,
+        where('slug', '==', identifier),
+        where('tenantId', '==', authStore.currentTenant)  // added
+      )
       const slugSnapshot = await getDocs(slugQuery)
 
       if (!slugSnapshot.empty) {
@@ -302,6 +330,11 @@ export const useOffersStore = defineStore('offers', () => {
       const docSnap = await getDoc(offerRef)
 
       if (docSnap.exists()) {
+        const data = docSnap.data()
+        if (data.tenantId !== authStore.currentTenant) {
+          console.log('❌ Offer belongs to another tenant')
+          return null
+        }
         currentOffer.value = transformOffer(docSnap)
         console.log('✅ Offer found in Firebase by ID:', currentOffer.value.title)
         return currentOffer.value
@@ -337,17 +370,22 @@ export const useOffersStore = defineStore('offers', () => {
     error.value = ''
 
     try {
-      // Check slug uniqueness
+      // Check slug uniqueness within tenant
       const slugCheck = await getDocs(
-        query(collection(db, 'offers'), where('slug', '==', input.slug))
+        query(
+          collection(db, 'offers'),
+          where('slug', '==', input.slug),
+          where('tenantId', '==', authStore.currentTenant)  // added
+        )
       )
       if (!slugCheck.empty) {
-        throw new Error(`Offer slug "${input.slug}" already exists`)
+        throw new Error(`Offer slug "${input.slug}" already exists in this tenant`)
       }
 
       const offersRef = collection(db, 'offers')
       const docRef = await addDoc(offersRef, {
         ...input,
+        tenantId: authStore.currentTenant,  // added
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       })
@@ -370,14 +408,18 @@ export const useOffersStore = defineStore('offers', () => {
 
     try {
       const offerRef = doc(db, 'offers', id)
-      // If slug is being updated, check uniqueness
+      // If slug is being updated, check uniqueness within tenant
       if (input.slug) {
         const slugCheck = await getDocs(
-          query(collection(db, 'offers'), where('slug', '==', input.slug))
+          query(
+            collection(db, 'offers'),
+            where('slug', '==', input.slug),
+            where('tenantId', '==', authStore.currentTenant)  // added
+          )
         )
         const exists = slugCheck.docs.some(d => d.id !== id)
         if (exists) {
-          throw new Error(`Offer slug "${input.slug}" already exists`)
+          throw new Error(`Offer slug "${input.slug}" already exists in this tenant`)
         }
       }
 

@@ -4,7 +4,10 @@ import { ref, computed } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { showNotification } from '@/utils/notifications'
 import { showConfirmation } from '@/utils/confirmation'
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
+import { db } from '@/firebase/config'
 import type { Product } from '@/types'
+import { useAuthStore } from './auth'
 
 export interface WishlistItem {
   id: string
@@ -14,7 +17,7 @@ export interface WishlistItem {
     ar: string
   }
   brand: string
-  brandSlug?: string            // ✅ Made optional to match Product type
+  brandSlug?: string
   size: string
   concentration: string
   price: number
@@ -26,10 +29,13 @@ export interface WishlistItem {
     heart: string[]
     base: string[]
   }
+  tenantId?: string
   dateAdded: string
 }
 
 export const useWishlistStore = defineStore('wishlist', () => {
+  const authStore = useAuthStore()
+
   // State - Use localStorage for guest users
   const items = useLocalStorage<WishlistItem[]>('luxury_wishlist', [])
   const isLoading = ref(false)
@@ -55,8 +61,51 @@ export const useWishlistStore = defineStore('wishlist', () => {
   const hasItem = (productId: string) => 
     items.value.some(item => item.id === productId)
 
-  // Actions - All work without authentication
-  const addToWishlist = (product: Product) => {
+  // Helper to determine stock status
+  const determineStockStatus = (product: Product): 'in_stock' | 'low_stock' | 'out_of_stock' => {
+    if (!product.inStock) return 'out_of_stock'
+    if (product.stockQuantity && product.stockQuantity < 10) return 'low_stock'
+    return 'in_stock'
+  }
+
+  // Save current wishlist to Firestore for logged-in user
+  const saveToFirestore = async () => {
+    if (!authStore.isAuthenticated) return
+    try {
+      const wishlistRef = doc(db, 'wishlists', authStore.currentUser!.uid)
+      await setDoc(wishlistRef, {
+        items: items.value,
+        privacy: privacySetting.value,
+        shareableId: shareableId.value || null,
+        tenantId: authStore.currentTenant,
+        updatedAt: serverTimestamp()
+      }, { merge: true })
+    } catch (error) {
+      console.error('Error saving wishlist to Firestore:', error)
+      showNotification('Failed to sync wishlist', 'error')
+    }
+  }
+
+  // Load wishlist from Firestore for logged-in user
+  const loadFromFirestore = async () => {
+    if (!authStore.isAuthenticated) return
+    try {
+      const wishlistRef = doc(db, 'wishlists', authStore.currentUser!.uid)
+      const snap = await getDoc(wishlistRef)
+      if (snap.exists()) {
+        const data = snap.data()
+        items.value = data.items || []
+        privacySetting.value = data.privacy || 'private'
+        shareableId.value = data.shareableId || ''
+      }
+    } catch (error) {
+      console.error('Error loading wishlist from Firestore:', error)
+      showNotification('Failed to load wishlist', 'error')
+    }
+  }
+
+  // Actions
+  const addToWishlist = async (product: Product) => {
     if (hasItem(product.id)) {
       showNotification({
         title: 'Already in Wishlist',
@@ -71,19 +120,24 @@ export const useWishlistStore = defineStore('wishlist', () => {
       slug: product.slug,
       name: product.name,
       brand: product.brand,
-      brandSlug: product.brandSlug,          // ✅ now allowed to be undefined
+      brandSlug: product.brandSlug,
       size: product.size,
       concentration: product.concentration,
       price: product.price,
       originalPrice: product.originalPrice,
       imageUrl: product.imageUrl,
       notes: product.notes,
+      tenantId: authStore.currentTenant,
       stockStatus: determineStockStatus(product),
       dateAdded: new Date().toISOString()
     }
 
     items.value.push(newItem)
     
+    if (authStore.isAuthenticated) {
+      await saveToFirestore()
+    }
+
     showNotification({
       title: 'Added to Wishlist',
       message: `${product.name.en} added to your wishlist`,
@@ -93,16 +147,19 @@ export const useWishlistStore = defineStore('wishlist', () => {
     return true
   }
 
-  const removeFromWishlist = (productId: string) => {
+  const removeFromWishlist = async (productId: string) => {
     const index = items.value.findIndex(item => item.id === productId)
     if (index !== -1) {
       const item = items.value[index]
       items.value.splice(index, 1)
       
-      // Remove from selected items if present
       const selectedIndex = selectedItems.value.indexOf(productId)
       if (selectedIndex > -1) {
         selectedItems.value.splice(selectedIndex, 1)
+      }
+
+      if (authStore.isAuthenticated) {
+        await saveToFirestore()
       }
 
       showNotification({
@@ -136,6 +193,9 @@ export const useWishlistStore = defineStore('wishlist', () => {
     if (confirmed) {
       items.value = []
       selectedItems.value = []
+      if (authStore.isAuthenticated) {
+        await saveToFirestore()
+      }
       showNotification({
         title: 'Wishlist Cleared',
         message: 'Your wishlist has been cleared',
@@ -146,10 +206,12 @@ export const useWishlistStore = defineStore('wishlist', () => {
     return false
   }
 
-  const removeSelected = () => {
+  const removeSelected = async () => {
     items.value = items.value.filter(item => !selectedItems.value.includes(item.id))
     selectedItems.value = []
-    
+    if (authStore.isAuthenticated) {
+      await saveToFirestore()
+    }
     showNotification({
       title: 'Items Removed',
       message: 'Selected items removed from wishlist',
@@ -159,25 +221,27 @@ export const useWishlistStore = defineStore('wishlist', () => {
 
   // Authentication-dependent actions
   const generateShareableLink = (userId?: string) => {
-    // If user is logged in, generate personalized link
     if (userId) {
       const id = Math.random().toString(36).substring(2, 15)
       shareableId.value = id
+      if (authStore.isAuthenticated) {
+        saveToFirestore()
+      }
       return `${window.location.origin}/wishlist/shared/${id}?user=${userId}`
     }
     
-    // For guest users, generate a session-based link
     const sessionId = localStorage.getItem('session_id') || Math.random().toString(36).substring(2, 15)
     localStorage.setItem('session_id', sessionId)
     return `${window.location.origin}/wishlist/shared/session/${sessionId}`
   }
 
-  const updatePrivacySetting = (setting: 'private' | 'shared' | 'public') => {
+  const updatePrivacySetting = async (setting: 'private' | 'shared' | 'public') => {
     privacySetting.value = setting
     
-    // If setting to public or shared, generate shareable link if not exists
     if (setting !== 'private' && !shareableId.value) {
-      generateShareableLink()
+      generateShareableLink(authStore.currentUser?.uid)
+    } else if (authStore.isAuthenticated) {
+      await saveToFirestore()
     }
     
     showNotification({
@@ -187,26 +251,16 @@ export const useWishlistStore = defineStore('wishlist', () => {
     })
   }
 
-  // Helper to determine stock status
-  const determineStockStatus = (product: Product): 'in_stock' | 'low_stock' | 'out_of_stock' => {
-    if (!product.inStock) return 'out_of_stock'
-    if (product.stockQuantity && product.stockQuantity < 10) return 'low_stock'
-    return 'in_stock'
-  }
-
   // Load wishlist (from localStorage for guests, from Firebase for logged-in users)
   const loadWishlist = async (userId?: string) => {
     isLoading.value = true
     try {
-      if (userId) {
-        // TODO: Load from Firebase for logged-in users
-        // For now, merge with localStorage
-        const savedWishlist = localStorage.getItem('luxury_wishlist')
-        if (savedWishlist) {
-          items.value = JSON.parse(savedWishlist)
-        }
+      if (authStore.isAuthenticated) {
+        await loadFromFirestore()
+      } else {
+        // For guests, wishlist is already loaded from localStorage (by useLocalStorage)
+        // Optionally, could try to load from a guest session ID? Not implemented.
       }
-      // For guests, wishlist is already loaded from localStorage
     } catch (error) {
       console.error('Error loading wishlist:', error)
       showNotification({
@@ -231,6 +285,9 @@ export const useWishlistStore = defineStore('wishlist', () => {
       }
       return item
     })
+    if (authStore.isAuthenticated) {
+      saveToFirestore()
+    }
   }
 
   return {

@@ -425,14 +425,13 @@
     </div>
   </div>
 </template>
-
 <script lang="ts">
 import { defineComponent, ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useAdminStore } from '@/stores/admin'
 import type { AdminUser, CreateAdminDto } from '@/types/admin'
-import AdminModal from '@/components/Admin/AdminModal.vue' // Fixed: uppercase 'Admin'
+import AdminModal from '@/components/Admin/AdminModal.vue'
 
 export default defineComponent({
   name: 'AdminsPage',
@@ -462,7 +461,7 @@ export default defineComponent({
     })
 
     // Computed properties
-    const isSuperAdmin = computed(() => authStore.user?.role === 'super-admin')
+    const isAdmin = computed(() => authStore.isAdmin) // ✅ changed from isSuperAdmin
     const currentUserUid = computed(() => authStore.user?.uid)
     const admins = computed(() => adminStore.admins)
     const stats = computed(() => adminStore.stats)
@@ -755,7 +754,7 @@ export default defineComponent({
       pagination,
       
       // Computed
-      isSuperAdmin,
+      isAdmin,                
       currentUserUid,
       admins,
       stats,

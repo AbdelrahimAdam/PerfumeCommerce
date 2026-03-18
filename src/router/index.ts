@@ -19,7 +19,8 @@ const publicRouteNames = [
   'contact',
   'about',
   'wishlist',
-  'not-found'
+  'not-found',
+  'register-company'          // <-- NEW: company registration page
 ]
 
 // List of public path patterns (for fallback)
@@ -38,7 +39,8 @@ const publicPathPatterns = [
   '/contact',
   '/about',
   '/wishlist',
-  '/admin/login'
+  '/admin/login',
+  '/register-company'         // <-- NEW: path pattern for safety
 ]
 
 const router = createRouter({

@@ -660,20 +660,28 @@
     </div>
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useLanguageStore } from '@/stores/language'
 import { useOrdersStore } from '@/stores/orders'
+import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 import type { Order, OrderStatus } from '@/types'
 import debounce from 'lodash/debounce'
 import { collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore'
 import { db } from '@/firebase/config'
 import { authNotification } from '@/utils/notifications'
 
+const router = useRouter()
 const languageStore = useLanguageStore()
 const ordersStore = useOrdersStore()
-// Removed unused authStore
+const authStore = useAuthStore()
+
+// ✅ Admin guard
+if (!authStore.isAdmin) {
+  router.push('/admin')
+}
+
 const { t } = languageStore
 
 // Real-time listener

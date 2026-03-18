@@ -21,10 +21,13 @@ import {
   updateDoc,
   serverTimestamp,
   arrayUnion,
-  arrayRemove
+  arrayRemove,
+  deleteDoc,
+  runTransaction
 } from 'firebase/firestore'
 import { auth, db } from '@/firebase/config'
 import { authNotification, showInfo } from '@/utils/notifications'
+import { useTenantStore } from './tenant'
 
 // List of public paths that don't need authentication
 const PUBLIC_PATHS = [
@@ -56,6 +59,8 @@ const isPublicPath = (path: string): boolean => {
 }
 
 export const useAuthStore = defineStore('auth', () => {
+  const tenantStore = useTenantStore()
+
   // Super-admin state
   const user = ref<AdminUser | null>(null)
   // Customer state
@@ -91,8 +96,13 @@ export const useAuthStore = defineStore('auth', () => {
     return Math.max(0, sessionExpiry.value.getTime() - new Date().getTime())
   })
 
-  // Helper: fetch super-admin from 'admins' collection
-  const getSuperAdminFromFirestore = async (firebaseUser: FirebaseUser): Promise<AdminUser | null> => {
+  // Current tenant ID: from logged-in user (admin or customer) or from domain resolution
+  const currentTenant = computed(() => 
+    user.value?.tenantId || customer.value?.tenantId || tenantStore.tenantId
+  )
+
+  // Helper: fetch admin from 'admins' collection
+  const getAdminFromFirestore = async (firebaseUser: FirebaseUser): Promise<AdminUser | null> => {
     try {
       const adminDoc = await getDoc(doc(db, 'admins', firebaseUser.uid))
       if (!adminDoc.exists()) return null
@@ -101,7 +111,8 @@ export const useAuthStore = defineStore('auth', () => {
         uid: firebaseUser.uid,
         email: firebaseUser.email || '',
         displayName: data.displayName || firebaseUser.displayName || '',
-        role: 'super-admin',
+        role: data.role || 'super-admin',
+        tenantId: data.tenantId,
         photoURL: data.photoURL || firebaseUser.photoURL || undefined,
         isActive: data.isActive !== false,
         permissions: data.permissions || ['all'],
@@ -110,57 +121,25 @@ export const useAuthStore = defineStore('auth', () => {
         lastLogin: new Date()
       }
     } catch (err: any) {
-      // Only log errors that are not permission-denied
       if (err.code !== 'permission-denied') {
-        console.error('❌ Error getting super-admin from Firestore:', err)
+        console.error('❌ Error getting admin from Firestore:', err)
       }
       return null
     }
   }
 
-  // Helper: fetch customer from 'customers' collection
+  // Helper: fetch customer from 'customers' collection – no auto‑creation
   const getCustomerFromFirestore = async (firebaseUser: FirebaseUser): Promise<CustomerUser | null> => {
     try {
       const customerDoc = await getDoc(doc(db, 'customers', firebaseUser.uid))
-      if (!customerDoc.exists()) {
-        // If customer doesn't exist in Firestore, create a basic profile
-        const newCustomer: CustomerUser = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email || '',
-          displayName: firebaseUser.displayName || '',
-          photoURL: firebaseUser.photoURL || undefined,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          lastLogin: new Date(),
-          addresses: [],
-          wishlist: [],
-          newsletter: false
-        }
-        
-        // Save to Firestore - clean undefined values
-        const customerData: any = {
-          uid: newCustomer.uid,
-          email: newCustomer.email,
-          displayName: newCustomer.displayName,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          addresses: newCustomer.addresses,
-          wishlist: newCustomer.wishlist,
-          newsletter: newCustomer.newsletter
-        }
-        if (newCustomer.photoURL) customerData.photoURL = newCustomer.photoURL
-        if (newCustomer.phoneNumber) customerData.phoneNumber = newCustomer.phoneNumber
-        
-        await setDoc(doc(db, 'customers', firebaseUser.uid), customerData)
-        
-        return newCustomer
-      }
+      if (!customerDoc.exists()) return null
       
       const data = customerDoc.data()
       return {
         uid: firebaseUser.uid,
         email: firebaseUser.email || '',
         displayName: data.displayName || firebaseUser.displayName || '',
+        tenantId: data.tenantId,
         photoURL: data.photoURL || firebaseUser.photoURL || undefined,
         phoneNumber: data.phoneNumber,
         addresses: data.addresses || [],
@@ -215,7 +194,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       // Check admin and customer collections in parallel
       const [adminData, customerData] = await Promise.all([
-        getSuperAdminFromFirestore(firebaseUser),
+        getAdminFromFirestore(firebaseUser),
         getCustomerFromFirestore(firebaseUser)
       ])
 
@@ -238,7 +217,6 @@ export const useAuthStore = defineStore('auth', () => {
         return { ...customerData, role: 'customer' }
       }
 
-      // If neither admin nor customer, treat as customer? Maybe auto-create? But should not happen.
       throw new Error('User profile not found')
     } catch (err: any) {
       console.error('❌ Authentication error:', err)
@@ -250,12 +228,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Admin Login action (only super-admin) – kept for backward compatibility
+  // Admin Login action – kept for backward compatibility
   const login = async (email: string, password: string): Promise<AdminUser> => {
     try {
       const result = await authenticate({ email, password, remember: false })
       if (result.role !== 'admin') {
-        throw new Error('Access denied: not a super-admin')
+        throw new Error('Access denied: not an admin')
       }
       return result as AdminUser
     } catch (err) {
@@ -276,7 +254,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Customer Registration
+  // Customer Registration – creates a customer document
   const customerRegister = async (userData: {
     email: string
     password: string
@@ -299,6 +277,7 @@ export const useAuthStore = defineStore('auth', () => {
         uid: firebaseUser.uid,
         email: userData.email,
         displayName: userData.displayName,
+        tenantId: currentTenant.value, // will be null if no tenant resolved
         photoURL: undefined,
         phoneNumber: userData.phoneNumber,
         addresses: [],
@@ -309,11 +288,11 @@ export const useAuthStore = defineStore('auth', () => {
         lastLogin: new Date()
       }
 
-      // Prepare Firestore data – omit undefined fields
       const firestoreData: any = {
         uid: newCustomer.uid,
         email: newCustomer.email,
         displayName: newCustomer.displayName,
+        tenantId: newCustomer.tenantId,
         addresses: newCustomer.addresses,
         wishlist: newCustomer.wishlist,
         newsletter: newCustomer.newsletter,
@@ -323,7 +302,6 @@ export const useAuthStore = defineStore('auth', () => {
       if (newCustomer.photoURL) firestoreData.photoURL = newCustomer.photoURL
       if (newCustomer.phoneNumber) firestoreData.phoneNumber = newCustomer.phoneNumber
 
-      // Save to Firestore
       await setDoc(doc(db, 'customers', firebaseUser.uid), firestoreData)
 
       customer.value = newCustomer
@@ -631,6 +609,124 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // ========== Register a company (tenant) and become its first admin ==========
+  const registerCompany = async (data: {
+    email: string
+    password: string
+    displayName: string
+    companyName: string
+    domain: string   // now required – the subdomain (e.g., "company")
+  }) => {
+    isLoading.value = true
+    error.value = null
+
+    try {
+      // 1. Create Firebase Auth user
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        data.email,
+        data.password
+      )
+      const firebaseUser = userCredential.user
+
+      // 2. Update display name in Auth profile
+      await updateProfile(firebaseUser, { displayName: data.displayName })
+
+      // 3. Generate a unique tenant ID from company name (slugified)
+      const tenantId = data.companyName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+
+      // 4. Construct full domain with root domain from environment
+      const rootDomain = import.meta.env.VITE_ROOT_DOMAIN
+      if (!rootDomain) {
+        throw new Error('VITE_ROOT_DOMAIN environment variable is not set')
+      }
+      const fullDomain = `${data.domain}.${rootDomain}`
+
+      // 5. Run a transaction to create tenant and admin documents
+      await runTransaction(db, async (transaction) => {
+        // Check if tenant already exists
+        const tenantRef = doc(db, 'tenants', tenantId)
+        const tenantSnap = await transaction.get(tenantRef)
+        if (tenantSnap.exists()) {
+          throw new Error('Company name already taken')
+        }
+
+        // Create tenant document with ownerId and domain
+        const tenantData: any = {
+          name: data.companyName,
+          domain: fullDomain,
+          ownerId: firebaseUser.uid,
+          createdAt: serverTimestamp(),
+          settings: {
+            defaultLanguage: 'en',
+            isActive: true
+          }
+        }
+        transaction.set(tenantRef, tenantData)
+
+        // Create admin document for the user
+        const adminRef = doc(db, 'admins', firebaseUser.uid)
+        transaction.set(adminRef, {
+          uid: firebaseUser.uid,
+          email: data.email,
+          displayName: data.displayName,
+          role: 'admin',
+          tenantId,
+          isActive: true,
+          permissions: ['all'],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          lastLogin: null
+        })
+
+        // Do NOT create a customer document – admins are not customers.
+      })
+
+      // 6. Delete any existing customer document for this user (e.g., from a previous registration)
+      const customerRef = doc(db, 'customers', firebaseUser.uid)
+      const customerSnap = await getDoc(customerRef)
+      if (customerSnap.exists()) {
+        console.log('🗑️ Deleting existing customer document for admin user')
+        await deleteDoc(customerRef)
+      }
+
+      // 7. Directly fetch the newly created admin document and set the user
+      const adminDoc = await getDoc(doc(db, 'admins', firebaseUser.uid))
+      if (!adminDoc.exists()) {
+        throw new Error('Admin document not found after transaction')
+      }
+      const adminData = adminDoc.data()
+      const newUser: AdminUser = {
+        uid: firebaseUser.uid,
+        email: adminData.email,
+        displayName: adminData.displayName,
+        role: adminData.role,
+        tenantId: adminData.tenantId,
+        photoURL: adminData.photoURL || undefined,
+        isActive: adminData.isActive,
+        permissions: adminData.permissions,
+        createdAt: adminData.createdAt?.toDate?.() || new Date(),
+        updatedAt: adminData.updatedAt?.toDate?.() || new Date(),
+        lastLogin: new Date()
+      }
+
+      // Set the user in the store and session
+      setAdminUser(newUser)
+
+      console.log('✅ Company registered:', tenantId)
+      return { tenantId, uid: firebaseUser.uid }
+    } catch (err: any) {
+      error.value = err.message || 'Registration failed'
+      console.error('Company registration error:', err)
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   // Logout action (clears both admin and customer)
   const logout = async () => {
     isLoading.value = true
@@ -663,7 +759,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Confirm Password Reset (uses aliased Firebase function)
+  // Confirm Password Reset
   const confirmPasswordReset = async (code: string, newPassword: string) => {
     try {
       await firebaseConfirmPasswordReset(auth, code, newPassword)
@@ -673,7 +769,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // Check session/auth state
-  const checkAuth = async (force: boolean = false) => {
+  const checkAuth = async (force: boolean = false, ignoreSession: boolean = false) => {
     // Skip auth check on public pages unless forced
     if (!force && isPublicPath(window.location.pathname)) {
       console.log('🌍 Public page - skipping auth check')
@@ -685,45 +781,49 @@ export const useAuthStore = defineStore('auth', () => {
 
     isLoading.value = true
     try {
-      // Check for existing sessions
-      const adminSaved = localStorage.getItem('luxury_admin_session')
-      const customerSaved = localStorage.getItem('luxury_customer_session')
+      // Check for existing sessions only if not ignoring them
+      if (!ignoreSession) {
+        const adminSaved = localStorage.getItem('luxury_admin_session')
+        const customerSaved = localStorage.getItem('luxury_customer_session')
 
-      if (adminSaved) {
-        try {
-          const { user: savedUser, expiry } = JSON.parse(adminSaved)
-          if (new Date(expiry) > new Date()) {
-            user.value = savedUser
-            sessionExpiry.value = new Date(expiry)
-            return
-          } else {
+        if (adminSaved) {
+          try {
+            const { user: savedUser, expiry } = JSON.parse(adminSaved)
+            if (new Date(expiry) > new Date()) {
+              user.value = savedUser
+              sessionExpiry.value = new Date(expiry)
+              return
+            } else {
+              localStorage.removeItem('luxury_admin_session')
+            }
+          } catch (e) {
             localStorage.removeItem('luxury_admin_session')
           }
-        } catch (e) {
-          localStorage.removeItem('luxury_admin_session')
         }
-      }
 
-      if (customerSaved) {
-        try {
-          const { user: savedUser, expiry } = JSON.parse(customerSaved)
-          if (new Date(expiry) > new Date()) {
-            customer.value = savedUser
-            sessionExpiry.value = new Date(expiry)
-            return
-          } else {
+        if (customerSaved) {
+          try {
+            const { user: savedUser, expiry } = JSON.parse(customerSaved)
+            if (new Date(expiry) > new Date()) {
+              customer.value = savedUser
+              sessionExpiry.value = new Date(expiry)
+              return
+            } else {
+              localStorage.removeItem('luxury_customer_session')
+            }
+          } catch (e) {
             localStorage.removeItem('luxury_customer_session')
           }
-        } catch (e) {
-          localStorage.removeItem('luxury_customer_session')
         }
+      } else {
+        console.log('⏭️ Ignoring session storage, forcing fresh fetch');
       }
 
       return new Promise<void>((resolve) => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
           if (firebaseUser) {
             // First check if admin
-            const adminData = await getSuperAdminFromFirestore(firebaseUser)
+            const adminData = await getAdminFromFirestore(firebaseUser)
             if (adminData) {
               user.value = adminData
               customer.value = null
@@ -772,7 +872,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Create initial super-admin
+  // Create initial super-admin (kept for compatibility)
   const createSuperAdmin = async (email: string, password: string, displayName: string) => {
     isLoading.value = true
     try {
@@ -783,6 +883,7 @@ export const useAuthStore = defineStore('auth', () => {
         email,
         displayName,
         role: 'super-admin',
+        tenantId: currentTenant.value, // will be null if no tenant
         photoURL: undefined,
         isActive: true,
         permissions: ['all'],
@@ -791,12 +892,12 @@ export const useAuthStore = defineStore('auth', () => {
         lastLogin: new Date()
       }
 
-      // Prepare Firestore data – omit undefined fields
       const firestoreData: any = {
         uid: adminData.uid,
         email: adminData.email,
         displayName: adminData.displayName,
         role: adminData.role,
+        tenantId: adminData.tenantId,
         isActive: adminData.isActive,
         permissions: adminData.permissions,
         createdAt: serverTimestamp(),
@@ -863,7 +964,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       if (firebaseUser) {
         // Check if admin first
-        const adminData = await getSuperAdminFromFirestore(firebaseUser)
+        const adminData = await getAdminFromFirestore(firebaseUser)
         if (adminData) {
           user.value = adminData
           customer.value = null
@@ -911,10 +1012,12 @@ export const useAuthStore = defineStore('auth', () => {
     userInitials,
     currentUser,
     sessionTimeLeft,
+    currentTenant,  
     
     // Admin Actions
     login,
     createSuperAdmin,
+    registerCompany,
     
     // Customer Actions
     customerLogin,

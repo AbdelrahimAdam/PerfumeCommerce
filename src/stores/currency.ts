@@ -1,3 +1,4 @@
+// src/stores/currency.ts
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
@@ -34,12 +35,10 @@ export const useCurrencyStore = defineStore('currency', () => {
   // ACTIONS
   // -------------------
   const initializeCurrency = () => {
-    // Optionally load from localStorage (e.g., if you ever had a preference, but now it's always EGP)
     const saved = localStorage.getItem('luxury_currency')
     if (saved && saved === 'EGP') {
       // already EGP
     } else {
-      // Ensure it's EGP
       localStorage.setItem('luxury_currency', 'EGP')
     }
   }
@@ -55,7 +54,6 @@ export const useCurrencyStore = defineStore('currency', () => {
   }
 
   const setCurrency = (currencyCode: string) => {
-    // Only EGP is allowed
     if (currencyCode !== 'EGP') {
       console.warn('Only EGP is supported')
       return

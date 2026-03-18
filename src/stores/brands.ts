@@ -11,14 +11,16 @@ import {
   orderBy,
   writeBatch,
   serverTimestamp
-} from 'firebase/firestore'  // removed unused deleteDoc
+} from 'firebase/firestore'
 import { db } from '@/firebase/config'
 import type { Brand, BrandWithProducts } from '@/types'
 import type { Product } from '@/types'
 import { useProductsStore } from '@/stores/products'
+import { useAuthStore } from './auth'
 
 export const useBrandsStore = defineStore('brands', () => {
   const productsStore = useProductsStore()
+  const authStore = useAuthStore()
 
   /* =========================
    * STATE (SAFE DEFAULTS)
@@ -52,28 +54,40 @@ export const useBrandsStore = defineStore('brands', () => {
       isActive: docData?.isActive !== false,
       price: Number(docData?.price ?? 0),
       productIds: Array.isArray(docData?.productIds) ? docData.productIds : [],
+      tenantId: docData?.tenantId,
       createdAt: docData?.createdAt?.toDate?.() ?? new Date(),
       updatedAt: docData?.updatedAt?.toDate?.() ?? new Date()
     }
   }
 
   /* =========================
-   * LOAD ALL BRANDS
+   * LOAD ALL BRANDS (tenant‑isolated)
    * ========================= */
   const loadBrands = async (): Promise<void> => {
     isLoading.value = true
     error.value = ''
 
     try {
+      const tenantId = authStore.currentTenant
+      if (!tenantId) {
+        console.warn('No tenant ID – skipping brand load')
+        brands.value = []
+        return
+      }
+
       const brandsRef = collection(db, 'brands')
-      const q = query(brandsRef, orderBy('name'))
+      const q = query(
+        brandsRef,
+        where('tenantId', '==', tenantId),
+        orderBy('name')
+      )
       const snapshot = await getDocs(q)
 
       brands.value = snapshot.docs.map(d =>
         transformBrandData(d.data(), d.id)
       )
 
-      console.log(`✅ Loaded ${brands.value.length} brands`)
+      console.log(`✅ Loaded ${brands.value.length} brands for tenant ${tenantId}`)
     } catch (err: any) {
       brands.value = []
       error.value = err?.message || 'Failed to load brands'
@@ -84,7 +98,7 @@ export const useBrandsStore = defineStore('brands', () => {
   }
 
   /* =========================
-   * GET BRAND BY SLUG
+   * GET BRAND BY SLUG (tenant‑isolated)
    * ========================= */
   const getBrandBySlug = async (
     slug: string
@@ -94,8 +108,18 @@ export const useBrandsStore = defineStore('brands', () => {
     currentBrand.value = null
 
     try {
+      const tenantId = authStore.currentTenant
+      if (!tenantId) {
+        console.warn('No tenant ID – cannot get brand by slug')
+        return null
+      }
+
       const brandsRef = collection(db, 'brands')
-      const q = query(brandsRef, where('slug', '==', slug))
+      const q = query(
+        brandsRef,
+        where('slug', '==', slug),
+        where('tenantId', '==', tenantId)
+      )
       const snapshot = await getDocs(q)
 
       if (snapshot.empty) return null
@@ -109,11 +133,39 @@ export const useBrandsStore = defineStore('brands', () => {
 
       const products: Product[] = ps.docs.map(d => {
         const data = d.data()
+        // Safely transform name – handle both string and object
+        let name = { en: '', ar: '' };
+        if (data.name) {
+          if (typeof data.name === 'object') {
+            name = { en: data.name.en || '', ar: data.name.ar || '' };
+          } else {
+            // If it's a string, use it for both languages (or fallback)
+            name = { en: String(data.name), ar: String(data.name) };
+          }
+        }
+        // Safely transform description
+        let description = { en: '', ar: '' };
+        if (data.description) {
+          if (typeof data.description === 'object') {
+            description = { en: data.description.en || '', ar: data.description.ar || '' };
+          } else {
+            description = { en: String(data.description), ar: String(data.description) };
+          }
+        }
+        // Safely transform notes
+        let notes = { top: [], heart: [], base: [] };
+        if (data.notes && typeof data.notes === 'object') {
+          notes = {
+            top: Array.isArray(data.notes.top) ? data.notes.top : [],
+            heart: Array.isArray(data.notes.heart) ? data.notes.heart : [],
+            base: Array.isArray(data.notes.base) ? data.notes.base : []
+          };
+        }
         return {
           id: d.id,
           slug: data.slug || '',
-          name: data.name || { en: '', ar: '' },
-          description: data.description || { en: '', ar: '' },
+          name: name,
+          description: description,
           brand: data.brand || '',
           brandSlug: data.brandSlug || '',
           brandId: data.brandId || '',
@@ -122,7 +174,7 @@ export const useBrandsStore = defineStore('brands', () => {
           size: data.size || '100ml',
           concentration: data.concentration || 'Eau de Parfum',
           classification: data.classification || '',
-          notes: data.notes || { top: [], heart: [], base: [] },
+          notes: notes,
           imageUrl: data.imageUrl || '',
           images: Array.isArray(data.images) ? data.images : [],
           category: data.category || '',
@@ -131,10 +183,11 @@ export const useBrandsStore = defineStore('brands', () => {
           isNew: data.isNew || false,
           isActive: data.isActive !== false,
           inStock: data.inStock !== false,
-          stockQuantity: Number(data.stockQuantity || data.stock || 0), // handle both fields
+          stockQuantity: Number(data.stockQuantity || data.stock || 0),
           rating: Number(data.rating) || undefined,
           reviewCount: Number(data.reviewCount) || undefined,
           sku: data.sku || '',
+          tenantId: data.tenantId,
           createdAt: data.createdAt?.toDate?.() || new Date(),
           updatedAt: data.updatedAt?.toDate?.() || new Date(),
           meta: data.meta || {}
@@ -157,7 +210,7 @@ export const useBrandsStore = defineStore('brands', () => {
   }
 
   /* =========================
-   * ADD BRAND + PRODUCTS - FIXED VERSION
+   * ADD BRAND + PRODUCTS (with tenantId)
    * ========================= */
   const addBrandWithProducts = async (
     brandData: Partial<Brand>,
@@ -171,6 +224,13 @@ export const useBrandsStore = defineStore('brands', () => {
     try {
       console.log('Starting addBrandWithProducts:', { brandData, productsData })
 
+      // Ensure tenantId is present
+      const tenantId = authStore.currentTenant
+      if (!tenantId) {
+        throw new Error('No tenant ID – cannot add brand')
+      }
+      console.log('✅ Tenant ID resolved:', tenantId);
+
       // Validate required fields
       if (!brandData.name || !brandData.slug) {
         throw new Error('Brand name and slug are required')
@@ -180,20 +240,23 @@ export const useBrandsStore = defineStore('brands', () => {
         throw new Error('Brand category is required')
       }
 
-      // Check slug uniqueness
+      // Check slug uniqueness within tenant
       const brandsRef = collection(db, 'brands')
       const slugCheck = await getDocs(
-        query(brandsRef, where('slug', '==', brandData.slug))
+        query(
+          brandsRef,
+          where('slug', '==', brandData.slug),
+          where('tenantId', '==', tenantId)
+        )
       )
       if (!slugCheck.empty) {
-        throw new Error(`Brand slug "${brandData.slug}" already exists`)
+        throw new Error(`Brand slug "${brandData.slug}" already exists in this tenant`)
       }
 
       // Brand document
       const brandDocRef = doc(collection(db, 'brands'))
       const brandId = brandDocRef.id
       
-      // Ensure all brand fields are properly set
       const brandPayload = {
         name: brandData.name.trim(),
         slug: brandData.slug.toLowerCase().trim(),
@@ -204,6 +267,7 @@ export const useBrandsStore = defineStore('brands', () => {
         isActive: brandData.isActive !== false,
         price: Number(brandData.price) || 0,
         productIds: [], // Will be updated after products are added
+        tenantId: tenantId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       }
@@ -213,21 +277,17 @@ export const useBrandsStore = defineStore('brands', () => {
       const productIds: string[] = []
       const productSlugs = new Set<string>()
 
-      // Validate products array
       if (!productsData || productsData.length === 0) {
         throw new Error('At least one product is required')
       }
 
-      // Products as subcollection
       for (let i = 0; i < productsData.length; i++) {
         const product = productsData[i]
         
-        // Validate required product fields
         if (!product.name?.en) {
           throw new Error(`Product ${i + 1} must have an English name`)
         }
 
-        // Generate slug if not provided
         let productSlug = product.slug
         if (!productSlug) {
           productSlug = product.name.en.toLowerCase()
@@ -237,7 +297,6 @@ export const useBrandsStore = defineStore('brands', () => {
             .trim()
         }
 
-        // Ensure slug uniqueness within this brand
         let counter = 1
         const originalSlug = productSlug
         while (productSlugs.has(productSlug)) {
@@ -248,7 +307,6 @@ export const useBrandsStore = defineStore('brands', () => {
 
         const productDocRef = doc(collection(db, 'brands', brandId, 'products'))
 
-        // Build product payload with all required fields
         const productPayload: any = {
           name: { 
             en: product.name.en?.trim() || '', 
@@ -270,15 +328,14 @@ export const useBrandsStore = defineStore('brands', () => {
           brand: brandData.slug?.toLowerCase().trim() || '',
           brandId: brandId,
           category: product.category || brandData.category || '',
-          // Handle stock quantity correctly
           stockQuantity: Number(product.stockQuantity || 0),
           sku: product.sku || '',
           notes: product.notes || { top: [], heart: [], base: [] },
+          tenantId: tenantId,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         }
 
-        // Add optional fields if they exist
         if (product.rating !== undefined) productPayload.rating = Number(product.rating)
         if (product.reviewCount !== undefined) productPayload.reviewCount = Number(product.reviewCount)
         if (product.ratings !== undefined) productPayload.ratings = Number(product.ratings)
@@ -288,16 +345,15 @@ export const useBrandsStore = defineStore('brands', () => {
         productIds.push(productDocRef.id)
       }
 
-      // Update brand with product IDs
       batch.update(brandDocRef, { 
         productIds, 
         updatedAt: serverTimestamp() 
       })
 
       console.log('Committing batch with', productIds.length + 1, 'documents')
+
       await batch.commit()
 
-      // Refresh stores
       await Promise.all([loadBrands(), productsStore.fetchProducts()])
 
       console.log(`✅ Created brand ${brandId} with ${productIds.length} products`)
@@ -389,15 +445,22 @@ export const useBrandsStore = defineStore('brands', () => {
   }
 
   /* =========================
-   * GET BRANDS BY CATEGORY
+   * GET BRANDS BY CATEGORY (tenant‑isolated)
    * ========================= */
   const getBrandsByCategory = async (category: string): Promise<Brand[]> => {
     try {
+      const tenantId = authStore.currentTenant
+      if (!tenantId) {
+        console.warn('No tenant ID – cannot get brands by category')
+        return []
+      }
+
       const brandsRef = collection(db, 'brands')
       const q = query(
         brandsRef,
         where('category', '==', category),
         where('isActive', '==', true),
+        where('tenantId', '==', tenantId),
         orderBy('name')
       )
       const snapshot = await getDocs(q)
