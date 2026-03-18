@@ -63,7 +63,7 @@
             />
           </div>
 
-          <!-- Subdomain (NEW) -->
+          <!-- Subdomain -->
           <div>
             <label for="subdomain" class="block text-sm font-medium text-gray-700 mb-1">
               Subdomain <span class="text-red-500">*</span>
@@ -230,9 +230,17 @@ const handleSubmit = async () => {
       password: form.value.password,
       displayName: form.value.displayName,
       companyName: form.value.companyName,
-      domain: form.value.subdomain   // pass the subdomain
+      domain: form.value.subdomain
     });
-    router.push('/admin/dashboard');
+
+    // Redirect to the new tenant's subdomain admin dashboard
+    const protocol = window.location.protocol; // "http:" or "https:"
+    const subdomain = form.value.subdomain;
+    const baseDomain = rootDomain; // e.g., "localhost:5173" or "perfume-commerce-rust.vercel.app"
+    const newUrl = `${protocol}//${subdomain}.${baseDomain}/admin/dashboard`;
+
+    // Full page redirect to the subdomain (cross‑domain navigation)
+    window.location.href = newUrl;
   } catch (err: any) {
     error.value = err.message || 'Registration failed. Please try again.';
   } finally {
