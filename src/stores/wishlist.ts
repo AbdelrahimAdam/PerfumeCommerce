@@ -82,7 +82,11 @@ export const useWishlistStore = defineStore('wishlist', () => {
       }, { merge: true })
     } catch (error) {
       console.error('Error saving wishlist to Firestore:', error)
-      showNotification('Failed to sync wishlist', 'error')
+      showNotification({
+        title: 'Error',
+        message: 'Failed to sync wishlist',
+        type: 'error'
+      })
     }
   }
 
@@ -100,7 +104,11 @@ export const useWishlistStore = defineStore('wishlist', () => {
       }
     } catch (error) {
       console.error('Error loading wishlist from Firestore:', error)
-      showNotification('Failed to load wishlist', 'error')
+      showNotification({
+        title: 'Error',
+        message: 'Failed to load wishlist',
+        type: 'error'
+      })
     }
   }
 
@@ -127,7 +135,7 @@ export const useWishlistStore = defineStore('wishlist', () => {
       originalPrice: product.originalPrice,
       imageUrl: product.imageUrl,
       notes: product.notes,
-      tenantId: authStore.currentTenant,
+      tenantId: authStore.currentTenant ?? undefined,
       stockStatus: determineStockStatus(product),
       dateAdded: new Date().toISOString()
     }
@@ -220,7 +228,8 @@ export const useWishlistStore = defineStore('wishlist', () => {
   }
 
   // Authentication-dependent actions
-  const generateShareableLink = (userId?: string) => {
+  const generateShareableLink = () => {
+    const userId = authStore.currentUser?.uid
     if (userId) {
       const id = Math.random().toString(36).substring(2, 15)
       shareableId.value = id
@@ -239,7 +248,7 @@ export const useWishlistStore = defineStore('wishlist', () => {
     privacySetting.value = setting
     
     if (setting !== 'private' && !shareableId.value) {
-      generateShareableLink(authStore.currentUser?.uid)
+      generateShareableLink()
     } else if (authStore.isAuthenticated) {
       await saveToFirestore()
     }
@@ -252,7 +261,7 @@ export const useWishlistStore = defineStore('wishlist', () => {
   }
 
   // Load wishlist (from localStorage for guests, from Firebase for logged-in users)
-  const loadWishlist = async (userId?: string) => {
+  const loadWishlist = async () => {
     isLoading.value = true
     try {
       if (authStore.isAuthenticated) {

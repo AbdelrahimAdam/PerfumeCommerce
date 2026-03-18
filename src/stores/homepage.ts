@@ -93,7 +93,7 @@ export const useHomepageStore = defineStore('homepage', () => {
       isDarkMode: false,
       defaultLanguage: 'ar'
     },
-    tenantId: authStore.currentTenant,
+    tenantId: authStore.currentTenant ?? undefined,
     lastUpdated: new Date().toISOString(),
     source: 'default'
   }

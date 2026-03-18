@@ -95,6 +95,10 @@ export const useOffersStore = defineStore('offers', () => {
 
   // Helper to transform homepage offer to Offer format
   const transformHomepageOffer = (offer: any, index: number): Offer => {
+    const tenantId = authStore.currentTenant
+    if (!tenantId) {
+      throw new Error('Tenant not resolved – cannot load offers')
+    }
     return {
       id: offer.id || `homepage-offer-${index}`,
       slug: offer.slug || '',
@@ -110,7 +114,7 @@ export const useOffersStore = defineStore('offers', () => {
       offerType: offer.offerType || 'percentage',
       terms: offer.terms,
       active: offer.active !== false,
-      tenantId: authStore.currentTenant,
+      tenantId,
       createdAt: new Date(),
       updatedAt: new Date()
     }
@@ -370,12 +374,17 @@ export const useOffersStore = defineStore('offers', () => {
     error.value = ''
 
     try {
+      const tenantId = authStore.currentTenant
+      if (!tenantId) {
+        throw new Error('Tenant not resolved – cannot create offer')
+      }
+
       // Check slug uniqueness within tenant
       const slugCheck = await getDocs(
         query(
           collection(db, 'offers'),
           where('slug', '==', input.slug),
-          where('tenantId', '==', authStore.currentTenant)  // added
+          where('tenantId', '==', tenantId)
         )
       )
       if (!slugCheck.empty) {
@@ -385,7 +394,7 @@ export const useOffersStore = defineStore('offers', () => {
       const offersRef = collection(db, 'offers')
       const docRef = await addDoc(offersRef, {
         ...input,
-        tenantId: authStore.currentTenant,  // added
+        tenantId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       })
@@ -407,6 +416,11 @@ export const useOffersStore = defineStore('offers', () => {
     error.value = ''
 
     try {
+      const tenantId = authStore.currentTenant
+      if (!tenantId) {
+        throw new Error('Tenant not resolved – cannot update offer')
+      }
+
       const offerRef = doc(db, 'offers', id)
       // If slug is being updated, check uniqueness within tenant
       if (input.slug) {
@@ -414,7 +428,7 @@ export const useOffersStore = defineStore('offers', () => {
           query(
             collection(db, 'offers'),
             where('slug', '==', input.slug),
-            where('tenantId', '==', authStore.currentTenant)  // added
+            where('tenantId', '==', tenantId)
           )
         )
         const exists = slugCheck.docs.some(d => d.id !== id)

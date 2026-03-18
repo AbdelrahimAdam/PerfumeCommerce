@@ -425,6 +425,7 @@
     </div>
   </div>
 </template>
+
 <script lang="ts">
 import { defineComponent, ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -461,8 +462,9 @@ export default defineComponent({
     })
 
     // Computed properties
-    const isAdmin = computed(() => authStore.isAdmin) // ✅ changed from isSuperAdmin
+    const isSuperAdmin = computed(() => authStore.isSuperAdmin)
     const currentUserUid = computed(() => authStore.user?.uid)
+    const currentTenant = computed(() => authStore.currentTenant)   // <-- added
     const admins = computed(() => adminStore.admins)
     const stats = computed(() => adminStore.stats)
     const error = computed(() => adminStore.error)
@@ -681,12 +683,17 @@ export default defineComponent({
         if (editingAdmin.value) {
           await adminStore.updateAdmin(editingAdmin.value.uid, adminData)
         } else {
+          // Ensure tenant exists before creating admin
+          if (!currentTenant.value) {
+            throw new Error('Tenant not resolved – cannot create admin')
+          }
           const createDto: CreateAdminDto = {
             email: adminData.email!,
             displayName: adminData.displayName,
             role: adminData.role!,
             password: adminData.password!,
-            isActive: adminData.isActive
+            isActive: adminData.isActive,
+            tenantId: currentTenant.value   // <-- added tenantId
           }
           await adminStore.createAdmin(createDto)
         }
@@ -754,8 +761,9 @@ export default defineComponent({
       pagination,
       
       // Computed
-      isAdmin,                
+      isSuperAdmin,
       currentUserUid,
+      currentTenant,        // <-- exposed (not used in template, but needed for logic)
       admins,
       stats,
       error,

@@ -1,3 +1,4 @@
+// src/stores/admin.ts
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { AdminService } from '@/services/adminService'
@@ -22,8 +23,7 @@ export const useAdminStore = defineStore('admin', () => {
     loading.value = true
     error.value = null
     try {
-      // Pass the current tenant ID to the service
-      const adminList = await AdminService.getAdmins(authStore.currentTenant)
+      const adminList = await AdminService.getAdmins(authStore.currentTenant ?? undefined)
       admins.value = adminList.map(admin => ({
         ...admin,
         createdAt: admin.createdAt || new Date().toISOString(),
@@ -44,9 +44,14 @@ export const useAdminStore = defineStore('admin', () => {
     loading.value = true
     error.value = null
     try {
+      // Ensure tenantId is provided
+      const tenantId = adminData.tenantId || authStore.currentTenant
+      if (!tenantId) {
+        throw new Error('Tenant ID is required to create an admin')
+      }
       const dataWithTenant = {
         ...adminData,
-        tenantId: adminData.tenantId || authStore.currentTenant
+        tenantId
       }
       const newAdmin = await AdminService.createAdmin(dataWithTenant)
       admins.value.unshift(newAdmin)
@@ -116,7 +121,7 @@ export const useAdminStore = defineStore('admin', () => {
   // Get admin stats for the current tenant
   const fetchAdminStats = async () => {
     try {
-      const adminStats = await AdminService.getAdminStats(authStore.currentTenant)
+      const adminStats = await AdminService.getAdminStats(authStore.currentTenant ?? undefined)
       stats.value = adminStats
     } catch (err: any) {
       console.error('Error fetching admin stats:', err)
@@ -126,7 +131,7 @@ export const useAdminStore = defineStore('admin', () => {
   // Search admins within the current tenant
   const searchAdmins = async (searchTerm: string) => {
     try {
-      return await AdminService.searchAdmins(searchTerm, authStore.currentTenant)
+      return await AdminService.searchAdmins(searchTerm, authStore.currentTenant ?? undefined)
     } catch (err: any) {
       console.error('Error searching admins:', err)
       return []

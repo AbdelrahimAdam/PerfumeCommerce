@@ -1,3 +1,4 @@
+// src/services/adminService.ts
 import { 
   collection, 
   doc, 
@@ -30,11 +31,16 @@ export class AdminService {
   static async getAdmins(tenantId?: string): Promise<AdminUser[]> {
     try {
       const adminsRef = collection(db, ADMIN_COLLECTION)
-      let constraints = [orderBy('createdAt', 'desc')]
+      let q
       if (tenantId) {
-        constraints.unshift(where('tenantId', '==', tenantId))
+        q = query(
+          adminsRef,
+          where('tenantId', '==', tenantId),
+          orderBy('createdAt', 'desc')
+        )
+      } else {
+        q = query(adminsRef, orderBy('createdAt', 'desc'))
       }
-      const q = query(adminsRef, ...constraints)
       const snapshot = await getDocs(q)
       
       return snapshot.docs.map(doc => ({
@@ -92,12 +98,12 @@ export class AdminService {
         email: adminData.email,
         displayName: adminData.displayName || '',
         role: adminData.role || 'admin',
-        tenantId: adminData.tenantId,          // <-- ADDED
+        tenantId: adminData.tenantId,          // now exists on CreateAdminDto
         isActive: adminData.isActive ?? true,
         createdAt: serverTimestamp(),
         lastLoginAt: serverTimestamp(),
-        phoneNumber: adminData.phoneNumber || '',
-        permissions: adminData.permissions || []
+        phoneNumber: adminData.phoneNumber || '',  // now exists
+        permissions: adminData.permissions || []   // now exists
       }
       
       await setDoc(adminRef, adminDocData)
@@ -108,7 +114,7 @@ export class AdminService {
         email: adminData.email,
         displayName: adminData.displayName || '',
         role: adminData.role || 'admin',
-        tenantId: adminData.tenantId,          // <-- ADDED
+        tenantId: adminData.tenantId,          // now exists
         isActive: adminData.isActive ?? true,
         createdAt: serverTimestamp(),
         isAdmin: true
@@ -154,10 +160,10 @@ export class AdminService {
         updatePayload.isActive = updateData.isActive
       }
       if (updateData.phoneNumber !== undefined) {
-        updatePayload.phoneNumber = updateData.phoneNumber
+        updatePayload.phoneNumber = updateData.phoneNumber  // now exists
       }
       if (updateData.permissions !== undefined) {
-        updatePayload.permissions = updateData.permissions
+        updatePayload.permissions = updateData.permissions  // now exists
       }
       // tenantId should never be updated via this method
 
@@ -238,7 +244,7 @@ export class AdminService {
     inactiveAdmins: number
   }> {
     try {
-      const admins = await this.getAdmins(tenantId)  // pass tenantId
+      const admins = await this.getAdmins(tenantId)
       
       return {
         total: admins.length,
@@ -259,12 +265,12 @@ export class AdminService {
    */
   static async searchAdmins(searchTerm: string, tenantId?: string): Promise<AdminUser[]> {
     try {
-      const admins = await this.getAdmins(tenantId)  // pass tenantId
+      const admins = await this.getAdmins(tenantId)
       
       return admins.filter(admin => 
         admin.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
         admin.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        admin.phoneNumber?.includes(searchTerm)
+        admin.phoneNumber?.includes(searchTerm)   // now exists on AdminUser
       )
     } catch (error) {
       console.error('Error searching admins:', error)

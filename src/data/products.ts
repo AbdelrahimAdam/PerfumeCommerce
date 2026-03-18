@@ -1,6 +1,8 @@
 // src/data/products.ts
 import type { Product } from '@/types'
 
+const DEFAULT_TENANT_ID = 'default' // Replace with actual tenant ID logic
+
 export const products: Product[] = [
   // ===================== DIOR PRODUCTS =====================
   {
@@ -32,6 +34,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 150,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1640995200, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -63,6 +66,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 95,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1640995200, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -94,6 +98,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 65,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1643673600, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -125,6 +130,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 80,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1640995200, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -156,6 +162,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 45,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1643673600, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -187,6 +194,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 55,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1643673600, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -221,6 +229,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 120,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1640995200, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -252,6 +261,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 85,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1640995200, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -283,6 +293,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 70,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1643673600, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -317,6 +328,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 40,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1640995200, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -348,6 +360,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 35,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1643673600, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -379,6 +392,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 25,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1643673600, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -410,6 +424,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 50,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1640995200, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -444,6 +459,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 90,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1640995200, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -475,6 +491,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 60,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1643673600, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -506,6 +523,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 40,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1643673600, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -540,6 +558,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 150,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1640995200, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -571,6 +590,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 110,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1640995200, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -605,6 +625,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 130,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1640995200, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   },
@@ -636,6 +657,7 @@ export const products: Product[] = [
     },
     inStock: true,
     stockQuantity: 75,
+    tenantId: DEFAULT_TENANT_ID,
     createdAt: { seconds: 1643673600, nanoseconds: 0 },
     updatedAt: { seconds: 1704067200, nanoseconds: 0 }
   }

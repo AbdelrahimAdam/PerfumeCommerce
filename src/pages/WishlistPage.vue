@@ -535,7 +535,8 @@ const shareWishlist = async () => {
   }
   
   try {
-    shareableLink.value = await wishlistStore.generateShareableLink(authStore.user?.uid || '')
+    // ✅ FIX: removed argument
+    shareableLink.value = await wishlistStore.generateShareableLink()
     showShareModal.value = true
   } catch (error) {
     console.error('Error generating shareable link:', error)

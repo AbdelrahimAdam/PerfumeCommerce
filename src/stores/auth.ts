@@ -273,11 +273,17 @@ export const useAuthStore = defineStore('auth', () => {
         displayName: userData.displayName
       })
 
+      // Ensure tenant exists
+      const tenantId = currentTenant.value
+      if (!tenantId) {
+        throw new Error('Tenant not resolved. Cannot register customer.')
+      }
+
       const newCustomer: CustomerUser = {
         uid: firebaseUser.uid,
         email: userData.email,
         displayName: userData.displayName,
-        tenantId: currentTenant.value, // will be null if no tenant resolved
+        tenantId, // now guaranteed string
         photoURL: undefined,
         phoneNumber: userData.phoneNumber,
         addresses: [],
@@ -878,12 +884,19 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password)
       const firebaseUser = userCredential.user
+
+      // Ensure tenant exists
+      const tenantId = currentTenant.value
+      if (!tenantId) {
+        throw new Error('Tenant not resolved. Cannot create super-admin.')
+      }
+
       const adminData: AdminUser = {
         uid: firebaseUser.uid,
         email,
         displayName,
         role: 'super-admin',
-        tenantId: currentTenant.value, // will be null if no tenant
+        tenantId, // now guaranteed string
         photoURL: undefined,
         isActive: true,
         permissions: ['all'],
