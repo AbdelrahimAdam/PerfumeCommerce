@@ -1006,6 +1006,24 @@ const emit = defineEmits<{
   saved: []
 }>()
 
+// ========== HELPER: Clean object for Firestore ==========
+const cleanForFirestore = (obj: any): any => {
+  if (obj === null || typeof obj !== 'object') return obj
+  if (Array.isArray(obj)) return obj.map(item => cleanForFirestore(item))
+  
+  const cleaned: any = {}
+  for (const [key, value] of Object.entries(obj)) {
+    // Skip fields that are File objects, undefined, or functions
+    if (value instanceof File) continue
+    if (value === undefined) continue
+    if (typeof value === 'function') continue
+    
+    // Recursively clean nested objects
+    cleaned[key] = cleanForFirestore(value)
+  }
+  return cleaned
+}
+
 // ========== STRICT BRAND ABBREVIATION MAPPING ==========
 const BRAND_CODES: Record<string, string> = {
   "Baccarat": "BC",
@@ -1675,7 +1693,8 @@ const getChangedFields = (): Record<string, any> => {
     changed.notes = { ...productData.notes }
   }
 
-  return changed
+  // Clean changed fields before returning
+  return cleanForFirestore(changed)
 }
 
 // ========== SAVE METHODS ==========
@@ -1742,6 +1761,9 @@ const saveProduct = async () => {
       isActive: productData.isActive !== false
     }
 
+    // Clean the payload (remove any undefined or File fields)
+    const cleanPayload = cleanForFirestore(productPayload)
+
     if (editing.value) {
       if (!props.product?.brandId) {
         throw new Error('Product brand ID missing')
@@ -1772,34 +1794,37 @@ const saveProduct = async () => {
       const productDocRef = doc(productsRef)
 
       const firestoreData = {
-        name: productPayload.name,
-        description: productPayload.description,
-        notes: productPayload.notes,
-        price: productPayload.price,
-        size: productPayload.size,
-        concentration: productPayload.concentration,
-        classification: productPayload.classification,
+        name: cleanPayload.name,
+        description: cleanPayload.description,
+        notes: cleanPayload.notes,
+        price: cleanPayload.price,
+        size: cleanPayload.size,
+        concentration: cleanPayload.concentration,
+        classification: cleanPayload.classification,
         imageUrl: productImage,
-        slug: productPayload.slug,
-        category: productPayload.category,
-        isBestSeller: productPayload.isBestSeller,
-        isFeatured: productPayload.isFeatured,
-        stockQuantity: productPayload.stock,
-        sku: productPayload.sku,
+        slug: cleanPayload.slug,
+        category: cleanPayload.category,
+        isBestSeller: cleanPayload.isBestSeller,
+        isFeatured: cleanPayload.isFeatured,
+        stockQuantity: cleanPayload.stock,
+        sku: cleanPayload.sku,
         inStock: true,
         brand: brand.name,
         brandSlug: brand.slug,
         brandId: brand.id,
-        tenantId: brand.tenantId, // ✅ Tenant ID included
+        tenantId: brand.tenantId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       }
 
-      batch.set(productDocRef, firestoreData)
+      // Final safety clean (though already clean)
+      const cleanFirestoreData = cleanForFirestore(firestoreData)
+
+      batch.set(productDocRef, cleanFirestoreData)
       await batch.commit()
 
       authNotification.loggedIn(t('Product added successfully'))
-      emit('save', { productData: productPayload, brandId: brand.id, createNewBrand: false })
+      emit('save', { productData: cleanPayload, brandId: brand.id, createNewBrand: false })
     } else if (brandSelectionMode.value === 'new') {
       let brandImage = newBrand.imageUrl
       if (brandImageBase64.value) {
@@ -1816,21 +1841,27 @@ const saveProduct = async () => {
         image: brandImage
       }
 
+      // Clean brand data
+      const cleanBrandData = cleanForFirestore(brandData)
+
       const productForBrand = {
-        ...productPayload,
-        brand: brandData.name,
-        brandSlug: brandData.slug
+        ...cleanPayload,
+        brand: cleanBrandData.name,
+        brandSlug: cleanBrandData.slug
       }
 
-      const totalSize = JSON.stringify([productForBrand]).length
+      // Clean product for brand
+      const cleanProductForBrand = cleanForFirestore(productForBrand)
+
+      const totalSize = JSON.stringify([cleanProductForBrand]).length
       if (totalSize > 1 * 1024 * 1024) {
         throw new Error('Total data exceeds Firestore 1MB limit. Please reduce image sizes.')
       }
 
-      const brandId = await brandsStore.addBrandWithProducts(brandData, [productForBrand])
+      const brandId = await brandsStore.addBrandWithProducts(cleanBrandData, [cleanProductForBrand])
       if (brandId) {
         authNotification.loggedIn(t('Brand and product added successfully'))
-        emit('save', { productData: productPayload, createNewBrand: true, newBrandData: brandData })
+        emit('save', { productData: cleanPayload, createNewBrand: true, newBrandData: cleanBrandData })
       } else {
         throw new Error('Failed to create brand')
       }
@@ -2004,3 +2035,7 @@ button, input, select, textarea {
   animation: spin 1s linear infinite;
 }
 </style>
+   
+     
+
+  
