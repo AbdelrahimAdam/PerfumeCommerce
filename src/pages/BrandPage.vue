@@ -1,3 +1,4 @@
+<!-- BrandPage.vue -->
 <template>
   <div v-if="isLoading" class="min-h-screen flex items-center justify-center">
     <LoadingSpinner size="lg" />
@@ -50,7 +51,7 @@
             @error="handleBrandImageError"
           />
         </div>
-        
+
         <!-- Brand Name & Signature - Right aligned -->
         <div class="flex-1 min-w-0" :class="{ 'text-right': isRTL }">
           <h1 class="text-2xl font-display-en font-bold text-gray-900 mb-1 truncate">
@@ -59,7 +60,7 @@
           <p v-if="currentBrand.signature" class="text-sm text-gray-600 line-clamp-2">
             {{ currentBrand.signature }}
           </p>
-          
+
           <!-- Category Badge - Mobile -->
           <div class="flex items-center gap-2 mt-2" :class="{ 'justify-end': isRTL }">
             <span class="px-3 py-1 bg-primary-50 text-primary-700 rounded-full text-xs font-medium">
@@ -83,7 +84,7 @@
                 @error="handleBrandImageError"
               />
             </div>
-            
+
             <div :class="{ 'lg:text-right': isRTL }">
               <h1 class="text-3xl lg:text-4xl xl:text-5xl font-display-en font-bold text-gray-900 mb-2">
                 {{ currentBrand.name }}
@@ -213,12 +214,12 @@
                 <div v-if="showFilters" 
                      class="fixed lg:absolute inset-x-0 bottom-0 lg:inset-auto lg:right-0 lg:mt-2 lg:w-96 bg-white rounded-t-2xl lg:rounded-xl shadow-luxury-lg border border-gray-200 p-5 z-50 animate-slide-up lg:animate-fade-in"
                      :class="{ 'lg:left-0': isRTL }">
-                  
+
                   <!-- Mobile Drag Handle -->
                   <div class="lg:hidden flex justify-center mb-4">
                     <div class="w-12 h-1 bg-gray-300 rounded-full"></div>
                   </div>
-                  
+
                   <!-- Mobile Header -->
                   <div class="flex items-center justify-between lg:hidden mb-5">
                     <h3 class="text-lg font-bold text-gray-900">{{ t('Filters') }}</h3>
@@ -228,7 +229,7 @@
                       </svg>
                     </button>
                   </div>
-                  
+
                   <div class="space-y-5 max-h-[70vh] lg:max-h-none overflow-y-auto">
                     <!-- Sort -->
                     <div>
@@ -271,7 +272,7 @@
                             />
                           </div>
                         </div>
-                        
+
                         <!-- Quick Price Presets -->
                         <div class="flex flex-wrap gap-2">
                           <button
@@ -445,7 +446,7 @@
             {{ t('Discover exclusive fragrance houses') }}
           </p>
         </div>
-        
+
         <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-6">
           <router-link
             v-for="brand in relatedBrands"
@@ -498,6 +499,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useLanguageStore } from '@/stores/language'
 import { useBrandsStore } from '@/stores/brands'
 import { useCartStore } from '@/stores/cart'
+import { useTenantStore } from '@/stores/tenant'
 import ProductGrid from '@/components/Products/ProductGrid.vue'
 import LoadingSpinner from '@/components/UI/LoadingSpinner.vue'
 import SEOHead from '@/components/UI/SEOHead.vue'
@@ -508,8 +510,9 @@ const router = useRouter()
 const languageStore = useLanguageStore()
 const brandsStore = useBrandsStore()
 const cartStore = useCartStore()
+const tenantStore = useTenantStore()
 
-const { t, isRTL } = languageStore // currentLanguage is not used
+const { t, isRTL } = languageStore
 
 // State
 const error = ref<string | null>(null)
@@ -694,6 +697,9 @@ const loadBrandData = async () => {
     
     console.log(`🔄 Loading brand: ${brandSlug.value}`)
     
+    // Wait for tenant to be ready before proceeding
+    await tenantStore.whenReady()
+    
     // Load brands if not loaded
     if (brandsStore.brands.length === 0) {
       await brandsStore.loadBrands()
@@ -835,6 +841,8 @@ watch(searchQuery, () => {
 
 // Initialize on mount
 onMounted(async () => {
+  // Wait for tenant to be ready before initializing brand store
+  await tenantStore.whenReady()
   await brandsStore.initialize()
   document.addEventListener('click', handleClickOutside)
 })
