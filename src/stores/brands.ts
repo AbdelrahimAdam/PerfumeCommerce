@@ -1,5 +1,6 @@
+// stores/brands.ts
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watchEffect } from 'vue'
 import {
   collection,
   doc,
@@ -28,6 +29,7 @@ export const useBrandsStore = defineStore('brands', () => {
   const currentBrand = ref<BrandWithProducts | null>(null)
   const isLoading = ref(false)
   const error = ref<string>('')
+  const isInitialized = ref(false) // optional flag to prevent redundant loads
 
   /* =========================
    * GETTERS
@@ -83,6 +85,7 @@ export const useBrandsStore = defineStore('brands', () => {
         transformBrandData(d.data(), d.id)
       )
 
+      isInitialized.value = true
     } catch (err: any) {
       brands.value = []
       error.value = err?.message || 'Failed to load brands'
@@ -249,13 +252,29 @@ export const useBrandsStore = defineStore('brands', () => {
   }
 
   /* =========================
-   * INIT
+   * INIT (manual, kept for compatibility)
    * ========================= */
   const initialize = async () => {
-    if (!brands.value.length) {
+    // This will load brands if not already loaded, but the watchEffect below
+    // will automatically handle it when tenant becomes available.
+    if (!brands.value.length && authStore.currentTenant) {
       await loadBrands()
     }
   }
+
+  /* =========================
+   * REACTIVE TENANT HANDLER
+   * ========================= */
+  watchEffect(async () => {
+    const tenantId = authStore.currentTenant
+    if (tenantId) {
+      // Load brands whenever tenant becomes available (including initial load)
+      await loadBrands()
+    } else {
+      // Clear brands when tenant is removed (logout, etc.)
+      brands.value = []
+    }
+  })
 
   return {
     brands,
