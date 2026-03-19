@@ -1,3 +1,4 @@
+<!-- ProductPage.vue -->
 <template>
   <div v-if="loading" class="min-h-screen flex items-center justify-center">
     <LoadingSpinner size="lg" />
@@ -82,7 +83,7 @@
               </svg>
             </button>
           </div>
-          
+
           <!-- Thumbnails - Compact Scroll -->
           <div v-if="productImages.length > 1" class="flex gap-2 lg:gap-3 mt-3 lg:mt-4 overflow-x-auto pb-1">
             <button
@@ -261,7 +262,7 @@
                   </svg>
                   <span>{{ t('Adding...') }}</span>
                 </span>
-                
+
                 <!-- Success animation -->
                 <span v-else-if="showQuantityAnimation" class="flex items-center justify-center gap-2">
                   <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -269,7 +270,7 @@
                   </svg>
                   <span>{{ t('Added!') }}</span>
                 </span>
-                
+
                 <!-- Normal state -->
                 <template v-else>
                   <template v-if="!product.isActive">
@@ -280,7 +281,7 @@
                   </template>
                 </template>
               </button>
-              
+
               <!-- Wishlist Button -->
               <button
                 @click="toggleWishlist"
@@ -366,6 +367,7 @@ import { useProductsStore } from '@/stores/products'
 import { useCartStore } from '@/stores/cart'
 import { useWishlistStore } from '@/stores/wishlist'
 import { useBrandsStore } from '@/stores/brands'
+import { useTenantStore } from '@/stores/tenant'
 import ProductGrid from '@/components/Products/ProductGrid.vue'
 import LoadingSpinner from '@/components/UI/LoadingSpinner.vue'
 import SEOHead from '@/components/UI/SEOHead.vue'
@@ -378,10 +380,10 @@ const productsStore = useProductsStore()
 const cartStore = useCartStore()
 const wishlistStore = useWishlistStore()
 const brandsStore = useBrandsStore()
+const tenantStore = useTenantStore()
 
-// ✅ Use storeToRefs for reactive language refs
 const { currentLanguage, isRTL } = storeToRefs(languageStore)
-const { t } = languageStore  // t is a function, not a ref
+const { t } = languageStore
 
 // Safe language for indexing (only 'en' or 'ar')
 const safeLang = computed(() => {
@@ -587,20 +589,25 @@ watch(
   { immediate: true }
 )
 
-// On mounted
+// On mounted - wait for tenant and load initial data if needed
 onMounted(async () => {
-  if (productsStore.products.length === 0) {
-    await productsStore.fetchProducts()
-  }
-  
-  if (brandsStore.brands.length === 0) {
-    await brandsStore.loadBrands()
+  console.log('📄 ProductPage mounted - waiting for tenant...')
+  try {
+    await tenantStore.whenReady()
+    console.log('✅ Tenant ready, ensuring products and brands are loaded...')
+    if (productsStore.products.length === 0) {
+      await productsStore.fetchProducts()
+    }
+    if (brandsStore.brands.length === 0) {
+      await brandsStore.loadBrands()
+    }
+  } catch (err) {
+    console.error('❌ Tenant resolution failed:', err)
   }
 })
 </script>
 
 <style scoped>
-/* ... (same styles as before) ... */
 .shadow-luxury-lg {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
 }
