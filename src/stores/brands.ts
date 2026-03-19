@@ -17,15 +17,13 @@ import type { Brand, BrandWithProducts } from '@/types'
 import type { Product } from '@/types'
 import { useProductsStore } from '@/stores/products'
 import { useAuthStore } from './auth'
-import { useTenantStore } from '@/stores/tenant' // ✅ إضافة
 
 export const useBrandsStore = defineStore('brands', () => {
   const productsStore = useProductsStore()
   const authStore = useAuthStore()
-  const tenantStore = useTenantStore() // ✅ إضافة
 
   /* =========================
-   * STATE (SAFE DEFAULTS)
+   * STATE
    * ========================= */
   const brands = ref<Brand[]>([])
   const currentBrand = ref<BrandWithProducts | null>(null)
@@ -44,52 +42,48 @@ export const useBrandsStore = defineStore('brands', () => {
   /* =========================
    * HELPERS
    * ========================= */
-  const transformBrandData = (docData: any, docId: string): Brand => {
-    return {
-      id: docId,
-      name: docData?.name ?? '',
-      slug: docData?.slug ?? '',
-      image: docData?.image ?? '',
-      signature: docData?.signature ?? '',
-      description: docData?.description ?? '',
-      category: docData?.category ?? '',
-      isActive: docData?.isActive !== false,
-      price: Number(docData?.price ?? 0),
-      productIds: Array.isArray(docData?.productIds) ? docData.productIds : [],
-      tenantId: docData?.tenantId,
-      createdAt: docData?.createdAt?.toDate?.() ?? new Date(),
-      updatedAt: docData?.updatedAt?.toDate?.() ?? new Date()
-    }
-  }
+  const transformBrandData = (docData: any, docId: string): Brand => ({
+    id: docId,
+    name: docData?.name ?? '',
+    slug: docData?.slug ?? '',
+    image: docData?.image ?? '',
+    signature: docData?.signature ?? '',
+    description: docData?.description ?? '',
+    category: docData?.category ?? '',
+    isActive: docData?.isActive !== false,
+    price: Number(docData?.price ?? 0),
+    productIds: Array.isArray(docData?.productIds) ? docData.productIds : [],
+    tenantId: docData?.tenantId,
+    createdAt: docData?.createdAt?.toDate?.() ?? new Date(),
+    updatedAt: docData?.updatedAt?.toDate?.() ?? new Date()
+  })
 
   /* =========================
-   * LOAD ALL BRANDS
+   * LOAD BRANDS (FIXED TENANT SOURCE)
    * ========================= */
   const loadBrands = async (): Promise<void> => {
     isLoading.value = true
     error.value = ''
 
     try {
-      const tenantId = tenantStore.tenantId // ✅ تعديل
+      const tenantId = authStore.currentTenant
       if (!tenantId) {
-        console.warn('No tenant ID – skipping brand load')
         brands.value = []
         return
       }
 
-      const brandsRef = collection(db, 'brands')
       const q = query(
-        brandsRef,
+        collection(db, 'brands'),
         where('tenantId', '==', tenantId),
         orderBy('name')
       )
+
       const snapshot = await getDocs(q)
 
       brands.value = snapshot.docs.map(d =>
         transformBrandData(d.data(), d.id)
       )
 
-      console.log(`✅ Loaded ${brands.value.length} brands for tenant ${tenantId}`)
     } catch (err: any) {
       brands.value = []
       error.value = err?.message || 'Failed to load brands'
@@ -99,7 +93,7 @@ export const useBrandsStore = defineStore('brands', () => {
   }
 
   /* =========================
-   * GET BRAND BY SLUG
+   * GET BRAND BY SLUG (FIXED TENANT)
    * ========================= */
   const getBrandBySlug = async (
     slug: string
@@ -109,15 +103,15 @@ export const useBrandsStore = defineStore('brands', () => {
     currentBrand.value = null
 
     try {
-      const tenantId = tenantStore.tenantId // ✅ تعديل
+      const tenantId = authStore.currentTenant
       if (!tenantId) return null
 
-      const brandsRef = collection(db, 'brands')
       const q = query(
-        brandsRef,
+        collection(db, 'brands'),
         where('slug', '==', slug),
         where('tenantId', '==', tenantId)
       )
+
       const snapshot = await getDocs(q)
 
       if (snapshot.empty) return null
@@ -125,68 +119,13 @@ export const useBrandsStore = defineStore('brands', () => {
       const brandDoc = snapshot.docs[0]
       const brand = transformBrandData(brandDoc.data(), brandDoc.id)
 
-      // ✅ FIX مهم جدًا
+      // 🔥 IMPORTANT FIX: filter products by tenant
       const productsRef = collection(db, 'brands', brand.id, 'products')
-      const ps = await getDocs(
-        query(productsRef, where('tenantId', '==', tenantId))
-      )
+      const ps = await getDocs(productsRef)
 
-      const products: Product[] = ps.docs.map(d => {
-        const data = d.data()
-
-        let name = { en: '', ar: '' }
-        if (data.name) {
-          if (typeof data.name === 'object') {
-            name = { en: data.name.en || '', ar: data.name.ar || '' }
-          } else {
-            name = { en: String(data.name), ar: String(data.name) }
-          }
-        }
-
-        let description = { en: '', ar: '' }
-        if (data.description) {
-          if (typeof data.description === 'object') {
-            description = { en: data.description.en || '', ar: data.description.ar || '' }
-          } else {
-            description = { en: String(data.description), ar: String(data.description) }
-          }
-        }
-
-        let notes = { top: [], heart: [], base: [] }
-        if (data.notes && typeof data.notes === 'object') {
-          notes = {
-            top: Array.isArray(data.notes.top) ? data.notes.top : [],
-            heart: Array.isArray(data.notes.heart) ? data.notes.heart : [],
-            base: Array.isArray(data.notes.base) ? data.notes.base : []
-          }
-        }
-
-        return {
-          id: d.id,
-          slug: data.slug || '',
-          name,
-          description,
-          brand: data.brand || '',
-          brandSlug: data.brandSlug || '',
-          brandId: data.brandId || '',
-          price: Number(data.price || 0),
-          size: data.size || '100ml',
-          concentration: data.concentration || 'Eau de Parfum',
-          notes,
-          imageUrl: data.imageUrl || '',
-          images: Array.isArray(data.images) ? data.images : [],
-          category: data.category || '',
-          isBestSeller: data.isBestSeller || false,
-          isFeatured: data.isFeatured || false,
-          isActive: data.isActive !== false,
-          inStock: data.inStock !== false,
-          stockQuantity: Number(data.stockQuantity || 0),
-          tenantId: data.tenantId,
-          createdAt: data.createdAt?.toDate?.() || new Date(),
-          updatedAt: data.updatedAt?.toDate?.() || new Date(),
-          meta: data.meta || {}
-        } as Product
-      })
+      const products: Product[] = ps.docs
+        .map(d => ({ id: d.id, ...d.data() } as Product))
+        .filter(p => p.tenantId === tenantId)
 
       currentBrand.value = {
         ...brand,
@@ -215,47 +154,47 @@ export const useBrandsStore = defineStore('brands', () => {
     const batch = writeBatch(db)
 
     try {
-      const tenantId = tenantStore.tenantId // ✅ تعديل
+      const tenantId = authStore.currentTenant
       if (!tenantId) throw new Error('No tenant ID')
 
-      const brandsRef = collection(db, 'brands')
-      const slugCheck = await getDocs(
-        query(
-          brandsRef,
-          where('slug', '==', brandData.slug),
-          where('tenantId', '==', tenantId)
-        )
-      )
-      if (!slugCheck.empty) throw new Error('Slug exists')
+      const brandRef = doc(collection(db, 'brands'))
+      const brandId = brandRef.id
 
-      const brandDocRef = doc(collection(db, 'brands'))
-      const brandId = brandDocRef.id
-
-      batch.set(brandDocRef, {
+      batch.set(brandRef, {
         ...brandData,
         tenantId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       })
 
+      const productIds: string[] = []
+
       for (const product of productsData) {
-        const productDocRef = doc(collection(db, 'brands', brandId, 'products'))
-        batch.set(productDocRef, {
+        const productRef = doc(collection(db, 'brands', brandId, 'products'))
+
+        batch.set(productRef, {
           ...product,
           tenantId,
           brandId,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         })
+
+        productIds.push(productRef.id)
       }
+
+      batch.update(brandRef, { productIds })
 
       await batch.commit()
 
-      await Promise.all([loadBrands(), productsStore.fetchProducts()])
+      await Promise.all([
+        loadBrands(),
+        productsStore.fetchProducts()
+      ])
 
       return brandId
     } catch (err: any) {
-      error.value = err?.message || 'Failed'
+      error.value = err?.message || 'Failed to add brand'
       return null
     } finally {
       isLoading.value = false
@@ -263,10 +202,60 @@ export const useBrandsStore = defineStore('brands', () => {
   }
 
   /* =========================
+   * UPDATE BRAND (FIX RETURN)
+   * ========================= */
+  const updateBrand = async (
+    brandId: string,
+    updates: Partial<Brand>
+  ): Promise<boolean> => {
+    try {
+      const refDoc = doc(db, 'brands', brandId)
+
+      await updateDoc(refDoc, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      })
+
+      await loadBrands()
+      return true
+    } catch (err: any) {
+      error.value = err?.message || 'Failed to update'
+      return false
+    }
+  }
+
+  /* =========================
+   * DELETE BRAND (FIX RETURN)
+   * ========================= */
+  const deleteBrand = async (brandId: string): Promise<boolean> => {
+    try {
+      const batch = writeBatch(db)
+
+      const brandRef = doc(db, 'brands', brandId)
+      batch.delete(brandRef)
+
+      const productsRef = collection(db, 'brands', brandId, 'products')
+      const productsSnap = await getDocs(productsRef)
+
+      productsSnap.docs.forEach(d => batch.delete(d.ref))
+
+      await batch.commit()
+
+      await loadBrands()
+      return true
+    } catch (err: any) {
+      error.value = err?.message || 'Failed to delete'
+      return false
+    }
+  }
+
+  /* =========================
    * INIT
    * ========================= */
   const initialize = async () => {
-    if (brands.value.length === 0) await loadBrands()
+    if (!brands.value.length) {
+      await loadBrands()
+    }
   }
 
   return {
@@ -274,11 +263,15 @@ export const useBrandsStore = defineStore('brands', () => {
     currentBrand,
     isLoading,
     error,
+
     activeBrands,
     brandCount,
+
     initialize,
     loadBrands,
     getBrandBySlug,
-    addBrandWithProducts
+    addBrandWithProducts,
+    updateBrand,
+    deleteBrand
   }
 })
