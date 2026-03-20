@@ -1,8 +1,9 @@
+<!-- App.vue -->
 <template>
   <div id="vue-app" :class="[isRTL ? 'rtl' : 'ltr', appClasses]" class="min-h-screen-mobile">
     <!-- SEO Head Component -->
     <SEOHead />
-    
+
     <!-- ADMIN LAYOUT -->
     <template v-if="routeLayout === 'admin'">
       <div class="admin-app-wrapper">
@@ -15,14 +16,14 @@
             isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
           ]"
         />
-        
+
         <!-- Mobile Overlay -->
         <div 
           v-if="isMobileMenuOpen"
           class="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden transition-opacity duration-300"
           @click="isMobileMenuOpen = false"
         ></div>
-        
+
         <!-- Main Content Area -->
         <div class="flex-1 flex flex-col min-w-0">
           <!-- Top Navigation Bar -->
@@ -56,7 +57,7 @@
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
                     </svg>
                   </button>
-                  
+
                   <!-- Logo (Mobile) -->
                   <router-link 
                     to="/admin" 
@@ -72,13 +73,13 @@
                       Parfum<span class="text-primary-500">.</span>
                     </span>
                   </router-link>
-                  
+
                   <!-- Page Title (Desktop) -->
                   <h1 class="hidden lg:block text-xl font-display-en font-bold text-gray-900 truncate ml-4">
                     {{ adminPageTitle }}
                   </h1>
                 </div>
-                
+
                 <!-- Right Side Actions -->
                 <div class="flex items-center space-x-1 sm:space-x-2 lg:space-x-4">
                   <!-- Language Switcher -->
@@ -94,7 +95,7 @@
                       {{ currentLanguage === 'en' ? 'AR' : 'EN' }}
                     </span>
                   </button>
-                  
+
                   <!-- Dark Mode Toggle -->
                   <button
                     @click="toggleDarkMode"
@@ -108,7 +109,7 @@
                       <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
                     </svg>
                   </button>
-                  
+
                   <!-- Notifications -->
                   <div class="relative">
                     <button
@@ -127,7 +128,7 @@
                         {{ unreadNotifications > 9 ? '9+' : unreadNotifications }}
                       </span>
                     </button>
-                    
+
                     <!-- Notifications Dropdown - Mobile Optimized -->
                     <div 
                       v-if="showNotifications"
@@ -190,7 +191,7 @@
                       </div>
                     </div>
                   </div>
-                  
+
                   <!-- User Profile Dropdown -->
                   <div class="relative">
                     <button
@@ -215,7 +216,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                       </svg>
                     </button>
-                    
+
                     <!-- User Menu Dropdown - Mobile Optimized -->
                     <div 
                       v-if="showUserMenu"
@@ -266,7 +267,7 @@
               </div>
             </div>
           </header>
-          
+
           <!-- Main Content -->
           <main class="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden overflow-y-auto bg-gray-50">
             <!-- Page Header -->
@@ -280,13 +281,13 @@
                   {{ adminPageDescription }}
                 </div>
               </div>
-              
+
               <!-- Desktop Description (only shown if there's a description) -->
               <div v-if="adminPageDescription" class="hidden lg:block text-gray-600">
                 {{ adminPageDescription }}
               </div>
             </div>
-            
+
             <!-- Router View -->
             <div class="admin-content">
               <router-view v-slot="{ Component }">
@@ -296,7 +297,7 @@
               </router-view>
             </div>
           </main>
-          
+
           <!-- Footer -->
           <footer class="px-4 sm:px-6 lg:px-8 py-4 border-t border-gray-200 bg-white flex-shrink-0">
             <div class="flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0">
@@ -316,7 +317,7 @@
         </div>
       </div>
     </template>
-    
+
     <!-- ADMIN LOGIN LAYOUT -->
     <template v-else-if="routeLayout === 'admin-login'">
       <div class="admin-login-wrapper">
@@ -328,12 +329,12 @@
         </router-view>
       </div>
     </template>
-    
+
     <!-- DEFAULT LAYOUT (Main Store) - OPTIMIZED SPACING -->
     <template v-else>
       <!-- Header Navigation -->
       <LuxuryHeader />
-      
+
       <!-- Main Content - Optimized spacing -->
       <main 
         id="main-content" 
@@ -355,16 +356,16 @@
           </transition>
         </router-view>
       </main>
-      
+
       <!-- Footer -->
       <LuxuryFooter />
-      
+
       <!-- Global Components -->
       <LuxuryCartSidebar />
       <LuxurySearchModal />
       <LuxuryNotificationCenter />
     </template>
-    
+
     <!-- Loading Overlay (Shared across all layouts) - UPDATED to match HTML preloader -->
     <transition name="fade">
       <div
@@ -392,6 +393,7 @@ import { useLanguageStore } from '@/stores/language'
 import { useCartStore } from '@/stores/cart'
 import { useAuthStore } from '@/stores/auth'
 import { useProductsStore } from '@/stores/products'
+import { useTenantStore } from '@/stores/tenant'  // ✅ Added tenant store import
 import { storeToRefs } from 'pinia'
 import { getLocalizedTitle } from '@/router/routes'
 
@@ -413,6 +415,7 @@ const languageStore = useLanguageStore()
 const cartStore = useCartStore()
 const authStore = useAuthStore()
 const productsStore = useProductsStore()
+const tenantStore = useTenantStore()  // ✅ Initialize tenant store
 
 // Use storeToRefs for reactive state/computed
 const { currentLanguage, isRTL } = storeToRefs(languageStore)
@@ -898,6 +901,11 @@ const handleEscapeKey = (event: KeyboardEvent) => {
 
 // Lifecycle
 onMounted(async () => {
+  // ✅ Start tenant resolution immediately (it will cache and be fast)
+  tenantStore.resolveTenantFromDomain().catch(err => {
+    console.warn('Tenant resolution failed, will retry later:', err)
+  })
+
   // Set initial header height with known values
   headerHeight.value = window.innerWidth < 768 ? 53 : 69
   document.documentElement.style.setProperty('--header-height', `${headerHeight.value}px`)
@@ -944,10 +952,10 @@ onMounted(async () => {
       console.log('🌍 Public route detected in App.vue - skipping auth initialization')
     }
     
-    await Promise.allSettled([
-      productsStore.fetchProducts ? productsStore.fetchProducts() : Promise.resolve(),
-      cartStore.initialize ? cartStore.initialize() : Promise.resolve()
-    ])
+    // Do NOT manually fetch products here; the products store's watchEffect will handle it after tenant is ready.
+    // But we can still initialize cart if needed.
+    if (cartStore.initialize) cartStore.initialize()
+    
   } catch (error) {
     console.error('❌ Store initialization failed:', error)
   }
