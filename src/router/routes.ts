@@ -295,7 +295,7 @@ export const routes: Array<RouteRecordRaw> = [
       },
       requiresAuth: false,
       isPublic: true,
-      layout: 'default'
+      layout: 'landing'
     }
   },
 
@@ -538,7 +538,7 @@ export const routes: Array<RouteRecordRaw> = [
       },
       requiresAuth: false,
       isPublic: true,
-      layout: 'default'
+      layout: 'landing'
     }
   },
 
@@ -557,7 +557,7 @@ export const routes: Array<RouteRecordRaw> = [
       },
       requiresAuth: false,
       isPublic: true,
-      layout: 'default'
+      layout: 'landing'
     }
   },
 
@@ -595,7 +595,7 @@ export const routes: Array<RouteRecordRaw> = [
       requiresAuth: false,
       requiresAdmin: false,
       isPublic: true,
-      layout: 'admin-login'
+      layout: 'landing'
     }
   },
 
@@ -905,7 +905,7 @@ export const routes: Array<RouteRecordRaw> = [
         ar: 'الصفحة غير موجودة | متجر العطور الفاخرة'
       },
       isPublic: true,
-      layout: 'default'
+      layout: 'landing'
     }
   }
 ]
