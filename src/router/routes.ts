@@ -237,7 +237,7 @@ export const routes: Array<RouteRecordRaw> = [
       },
       requiresAuth: false,
       isPublic: true,
-      layout: 'default'
+      layout: 'landing'
     }
   },
 
@@ -256,7 +256,7 @@ export const routes: Array<RouteRecordRaw> = [
       },
       requiresAuth: false,
       isPublic: true,
-      layout: 'default'
+      layout: 'landing'
     }
   },
 
@@ -315,7 +315,7 @@ export const routes: Array<RouteRecordRaw> = [
       },
       requiresAuth: false,
       isPublic: true,
-      layout: 'default'
+      layout: 'landing'
     }
   },
 
@@ -335,7 +335,7 @@ export const routes: Array<RouteRecordRaw> = [
       },
       requiresAuth: true,
       isPublic: false,
-      layout: 'default'
+      layout: 'landing'
     }
   },
 
@@ -354,7 +354,7 @@ export const routes: Array<RouteRecordRaw> = [
       },
       requiresAuth: true,
       isPublic: false,
-      layout: 'default'
+      layout: 'landing'
     }
   },
 
@@ -373,7 +373,7 @@ export const routes: Array<RouteRecordRaw> = [
       },
       requiresAuth: true,
       isPublic: false,
-      layout: 'default'
+      layout: 'landing'
     }
   },
 
@@ -416,7 +416,7 @@ export const routes: Array<RouteRecordRaw> = [
       },
       requiresAuth: false, // Public - guests can look up orders by email
       isPublic: true,
-      layout: 'default'
+      layout: 'landing'
     }
   },
 
@@ -437,7 +437,7 @@ export const routes: Array<RouteRecordRaw> = [
       },
       requiresAuth: false, // Public but will verify email
       isPublic: true,
-      layout: 'default'
+      layout: 'landing'
     }
   },
 
