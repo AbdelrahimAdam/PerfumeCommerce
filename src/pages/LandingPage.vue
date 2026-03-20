@@ -23,12 +23,14 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
               </svg>
             </router-link>
-            <router-link
-              to="/shop"
+            <a
+              :href="demoStoreUrl"
+              target="_blank"
+              rel="noopener noreferrer"
               class="inline-flex items-center justify-center px-6 sm:px-8 py-3 sm:py-4 bg-white text-gray-700 font-semibold rounded-lg border border-gray-300 hover:border-primary-500 hover:text-primary-600 transition-colors text-sm sm:text-base"
             >
               {{ t('exploreDemo') }}
-            </router-link>
+            </a>
           </div>
         </div>
       </div>
@@ -170,6 +172,10 @@ import { useLanguageStore } from '@/stores/language'
 
 const languageStore = useLanguageStore()
 const { isRTL, t } = languageStore
+
+// Construct the demo store URL – change "mard" to your actual demo tenant subdomain
+const rootDomain = import.meta.env.VITE_ROOT_DOMAIN || 'localhost:5173'
+const demoStoreUrl = `https://mard.${rootDomain}/`
 </script>
 
 <style scoped>
