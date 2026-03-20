@@ -330,6 +330,13 @@
       </div>
     </template>
 
+    <!-- LANDING LAYOUT (Marketing) -->
+    <template v-else-if="routeLayout === 'landing'">
+      <LandingLayout>
+        <router-view />
+      </LandingLayout>
+    </template>
+
     <!-- DEFAULT LAYOUT (Main Store) - OPTIMIZED SPACING -->
     <template v-else>
       <!-- Header Navigation -->
@@ -393,7 +400,7 @@ import { useLanguageStore } from '@/stores/language'
 import { useCartStore } from '@/stores/cart'
 import { useAuthStore } from '@/stores/auth'
 import { useProductsStore } from '@/stores/products'
-import { useTenantStore } from '@/stores/tenant'  // ✅ Added tenant store import
+import { useTenantStore } from '@/stores/tenant'
 import { storeToRefs } from 'pinia'
 import { getLocalizedTitle } from '@/router/routes'
 
@@ -405,6 +412,7 @@ import LuxuryCartSidebar from '@/components/Cart/LuxuryCartSidebar.vue'
 import LuxurySearchModal from '@/components/search/SearchModal.vue'
 import LuxuryNotificationCenter from '@/components/UI/LuxuryNotificationCenter.vue'
 import AdminSidebar from '@/components/Admin/AdminSidebar.vue'
+import LandingLayout from '@/components/Layout/LandingLayout.vue' // ✅ Import landing layout
 
 // Router
 const router = useRouter()
@@ -415,7 +423,7 @@ const languageStore = useLanguageStore()
 const cartStore = useCartStore()
 const authStore = useAuthStore()
 const productsStore = useProductsStore()
-const tenantStore = useTenantStore()  // ✅ Initialize tenant store
+const tenantStore = useTenantStore()
 
 // Use storeToRefs for reactive state/computed
 const { currentLanguage, isRTL } = storeToRefs(languageStore)
@@ -497,6 +505,7 @@ const appClasses = computed(() => ({
   'reduced-motion': prefersReducedMotion.value,
   'admin-layout': routeLayout.value === 'admin',
   'admin-login-layout': routeLayout.value === 'admin-login',
+  'landing-layout': routeLayout.value === 'landing',
   'default-layout': routeLayout.value === 'default'
 }))
 
