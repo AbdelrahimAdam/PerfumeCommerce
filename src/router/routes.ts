@@ -276,7 +276,7 @@ export const routes: Array<RouteRecordRaw> = [
       },
       requiresAuth: false,
       isPublic: true,
-      layout: 'default'
+      layout: 'landing'
     }
   },
 
