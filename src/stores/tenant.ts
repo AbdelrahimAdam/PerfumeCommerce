@@ -147,7 +147,7 @@ export const useTenantStore = defineStore('tenant', () => {
     if (timeoutMs) {
       return Promise.race([
         readyPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Tenant resolution timeout')), timeoutMs))
+        new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Tenant resolution timeout')), timeoutMs))
       ])
     }
     return readyPromise
