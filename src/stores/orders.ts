@@ -23,6 +23,7 @@ import { db } from '@/firebase/config'
 import { useAuthStore } from './auth'
 import { useCartStore } from './cart'
 import { useProductsStore } from './products'
+import { useBrandsStore } from './brands'
 import { authNotification } from '@/utils/notifications'
 import type { 
   Order, 
@@ -39,6 +40,7 @@ export const useOrdersStore = defineStore('orders', () => {
   const authStore = useAuthStore()
   const cartStore = useCartStore()
   const productsStore = useProductsStore()
+  const brandsStore = useBrandsStore()
 
   // State
   const orders = ref<Order[]>([])
@@ -171,7 +173,7 @@ export const useOrdersStore = defineStore('orders', () => {
     return null
   }
 
-  // ========== SECURITY‑FIXED fetchOrders ==========
+  // ========== fetchOrders ==========
   const fetchOrders = async (options?: {
     limit?: number
     status?: OrderStatus
@@ -189,7 +191,7 @@ export const useOrdersStore = defineStore('orders', () => {
     try {
       const ordersCollection = collection(db, 'orders')
       const constraints: any[] = [
-        where('tenantId', '==', authStore.currentTenant),  // added
+        where('tenantId', '==', authStore.currentTenant),
         orderBy('createdAt', 'desc')
       ]
 
@@ -313,9 +315,7 @@ export const useOrdersStore = defineStore('orders', () => {
         if (savedOrder) {
           try {
             const parsed = JSON.parse(savedOrder)
-            // Check if it's the same order
             if (parsed.id === orderId) {
-              // Convert string dates back to Date objects
               const restoredOrder: Order = {
                 ...parsed,
                 createdAt: new Date(parsed.createdAt),
@@ -336,7 +336,7 @@ export const useOrdersStore = defineStore('orders', () => {
           }
         }
       }
-      
+
       error.value = err instanceof Error ? err.message : 'Failed to fetch order'
       console.error('Error fetching order:', err)
       return null
@@ -354,7 +354,7 @@ export const useOrdersStore = defineStore('orders', () => {
       const ordersCollection = collection(db, 'orders')
       const q = query(
         ordersCollection,
-        where('tenantId', '==', authStore.currentTenant),  // added
+        where('tenantId', '==', authStore.currentTenant),
         where('orderNumber', '==', orderNumber),
         where('customer.email', '==', email)
       )
@@ -379,7 +379,12 @@ export const useOrdersStore = defineStore('orders', () => {
     }
   }
 
-  // ========== FIXED createOrder (no undefined fields) ==========
+  // Helper to get product reference (in brand subcollection)
+  const getProductRef = (brandId: string, productId: string) => {
+    return doc(db, 'brands', brandId, 'products', productId)
+  }
+
+  // ========== createOrder (with correct stock updates) ==========
   const createOrder = async (
     shippingAddress: ShippingAddress,
     paymentMethod: PaymentMethod = 'cash_on_delivery',
@@ -409,23 +414,52 @@ export const useOrdersStore = defineStore('orders', () => {
         const currentUserEmail = getCurrentUserEmail()
         const currentUserName = getCurrentUserName()
 
-        const orderItems: OrderItem[] = cartStore.items.map(item => {
-          const product = productsStore.products.find(p => p.id === item.id)
-          return {
-            id: item.id,
-            productId: item.id,
-            name: product?.name?.en || item.name?.en || 'Product',
-            nameAr: product?.name?.ar || item.name?.ar,
-            price: product?.price || item.price,
-            quantity: item.quantity || 1,
-            size: product?.size || item.size || '100ml',
-            concentration: product?.concentration || item.concentration || 'Eau de Parfum',
-            image: product?.imageUrl || item.imageUrl || '/images/default-product.jpg',
-            brand: product?.brand || item.brand || '',
-            imageUrl: product?.imageUrl || item.imageUrl || '',
-            originalPrice: product?.originalPrice
+        // Prepare order items with product details and stock validation
+        const orderItems: OrderItem[] = []
+        for (const cartItem of cartStore.items) {
+          // Find the product in the products store (already loaded)
+          const product = productsStore.products.find(p => p.id === cartItem.id)
+          if (!product) {
+            throw new Error(`Product ${cartItem.id} not found`)
           }
-        })
+
+          // Get the product reference in the brand subcollection
+          const productRef = getProductRef(product.brandId, product.id)
+          const productDoc = await transaction.get(productRef)
+
+          if (!productDoc.exists()) {
+            throw new Error(`Product ${cartItem.id} no longer exists`)
+          }
+
+          const productData = productDoc.data()
+          const currentStock = productData.stockQuantity || 0
+          const requestedQty = cartItem.quantity || 1
+
+          if (currentStock < requestedQty) {
+            throw new Error(`Insufficient stock for ${product.name.en || product.name}`)
+          }
+
+          // Reduce stock (will commit in transaction)
+          transaction.update(productRef, {
+            stockQuantity: currentStock - requestedQty,
+            updatedAt: serverTimestamp()
+          })
+
+          orderItems.push({
+            id: cartItem.id,
+            productId: cartItem.id,
+            name: product.name?.en || 'Product',
+            nameAr: product.name?.ar,
+            price: product.price,
+            quantity: requestedQty,
+            size: product.size || '100ml',
+            concentration: product.concentration || 'Eau de Parfum',
+            image: product.imageUrl || '/images/default-product.jpg',
+            brand: product.brand,
+            imageUrl: product.imageUrl || '',
+            originalPrice: product.originalPrice
+          })
+        }
 
         const subtotal = cartStore.subtotal
         const shipping = cartStore.shipping || 50
@@ -472,7 +506,7 @@ export const useOrdersStore = defineStore('orders', () => {
             note: h.note,
             updatedBy: h.updatedBy
           })),
-          tenantId: authStore.currentTenant,  // added
+          tenantId: authStore.currentTenant,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         }
@@ -494,19 +528,6 @@ export const useOrdersStore = defineStore('orders', () => {
 
         const ordersCollection = collection(db, 'orders')
         const docRef = await addDoc(ordersCollection, orderData)
-
-        for (const item of orderItems) {
-          const productRef = doc(db, 'products', item.productId)
-          const productDoc = await getDoc(productRef)
-
-          if (productDoc.exists()) {
-            const currentStock = productDoc.data().stockQuantity || 0
-            transaction.update(productRef, {
-              stockQuantity: Math.max(0, currentStock - item.quantity),
-              updatedAt: serverTimestamp()
-            })
-          }
-        }
 
         return {
           id: docRef.id,
@@ -550,7 +571,7 @@ export const useOrdersStore = defineStore('orders', () => {
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to create order'
       console.error('Error creating order:', err)
-      authNotification.error('Failed to place order. Please try again.')
+      authNotification.error(error.value || 'Failed to place order. Please try again.')
       return null
     } finally {
       loading.value = false
@@ -574,21 +595,21 @@ export const useOrdersStore = defineStore('orders', () => {
       if (guestId) {
         q = query(
           ordersCollection,
-          where('tenantId', '==', authStore.currentTenant),  // added
+          where('tenantId', '==', authStore.currentTenant),
           where('guestId', '==', guestId),
           orderBy('createdAt', 'desc')
         )
       } else if (guestEmail) {
         q = query(
           ordersCollection,
-          where('tenantId', '==', authStore.currentTenant),  // added
+          where('tenantId', '==', authStore.currentTenant),
           where('customer.email', '==', guestEmail),
           orderBy('createdAt', 'desc')
         )
       } else if (guestOrderNumber) {
         q = query(
           ordersCollection,
-          where('tenantId', '==', authStore.currentTenant),  // added
+          where('tenantId', '==', authStore.currentTenant),
           where('orderNumber', '==', guestOrderNumber),
           orderBy('createdAt', 'desc')
         )
@@ -619,7 +640,7 @@ export const useOrdersStore = defineStore('orders', () => {
     }
   }
 
-  // ========== updateOrderStatus ==========
+  // ========== updateOrderStatus (with correct stock restoration) ==========
   const updateOrderStatus = async (
     orderId: string,
     status: OrderStatus,
@@ -691,9 +712,15 @@ export const useOrdersStore = defineStore('orders', () => {
         if (order.paymentStatus === 'paid') {
           updateData.paymentStatus = 'refunded'
         }
-        // Restore stock
+
+        // Restore stock for each product
         for (const item of order.items) {
-          const productRef = doc(db, 'products', item.productId)
+          const product = productsStore.products.find(p => p.id === item.productId)
+          if (!product) {
+            console.warn(`Product ${item.productId} not found in store, cannot restore stock`)
+            continue
+          }
+          const productRef = getProductRef(product.brandId, product.id)
           const productDoc = await getDoc(productRef)
           if (productDoc.exists()) {
             const currentStock = productDoc.data().stockQuantity || 0
@@ -701,6 +728,8 @@ export const useOrdersStore = defineStore('orders', () => {
               stockQuantity: currentStock + item.quantity,
               updatedAt: serverTimestamp()
             })
+          } else {
+            console.warn(`Product document for ${item.productId} not found in Firestore`)
           }
         }
       }
@@ -793,17 +822,46 @@ export const useOrdersStore = defineStore('orders', () => {
     }
   }
 
-  // ========== Stub functions (marked as unused) ==========
-  const _updateOrder = async (_orderId: string, _updateData: Partial<Order>) => { /* ... */ }
-  const _cancelOrder = async (_orderId: string, _reason?: string) => { /* ... */ }
-  const _deleteOrder = async (_orderId: string) => { /* ... */ }
-  const _searchOrders = async (_searchTerm: string, _status?: OrderStatus) => { /* ... */ }
-  const _getOrdersByEmail = async (_email: string) => { /* ... */ }
-  const _reorder = async (_orderId: string) => { /* ... */ }
-  const _downloadInvoice = async (_orderId: string) => { /* ... */ }
-  const _getMonthlyRevenue = async (_year: number, _month: number) => { /* ... */ }
-  const _getOrderStats = async () => { /* ... */ }
-  const _loadMore = async () => { /* ... */ }
+  // ========== Stub functions (with warnings) ==========
+  const updateOrder = async (_orderId: string, _updateData: Partial<Order>) => {
+    console.warn('updateOrder not implemented')
+    return false
+  }
+  const cancelOrder = async (_orderId: string, _reason?: string) => {
+    console.warn('cancelOrder not implemented')
+    return false
+  }
+  const deleteOrder = async (_orderId: string) => {
+    console.warn('deleteOrder not implemented')
+    return false
+  }
+  const searchOrders = async (_searchTerm: string, _status?: OrderStatus) => {
+    console.warn('searchOrders not implemented')
+    return []
+  }
+  const getOrdersByEmail = async (_email: string) => {
+    console.warn('getOrdersByEmail not implemented')
+    return []
+  }
+  const reorder = async (_orderId: string) => {
+    console.warn('reorder not implemented')
+    return false
+  }
+  const downloadInvoice = async (_orderId: string) => {
+    console.warn('downloadInvoice not implemented')
+    return null
+  }
+  const getMonthlyRevenue = async (_year: number, _month: number) => {
+    console.warn('getMonthlyRevenue not implemented')
+    return 0
+  }
+  const getOrderStats = async () => {
+    console.warn('getOrderStats not implemented')
+    return null
+  }
+  const loadMore = async () => {
+    console.warn('loadMore not implemented')
+  }
 
   // ========== Clear helpers ==========
   const clearCurrentOrder = () => { currentOrder.value = null }
@@ -847,16 +905,16 @@ export const useOrdersStore = defineStore('orders', () => {
     getGuestOrders,
     updateOrderStatus,
     updatePaymentStatus,
-    updateOrder: _updateOrder,
-    cancelOrder: _cancelOrder,
-    deleteOrder: _deleteOrder,
-    searchOrders: _searchOrders,
-    getOrdersByEmail: _getOrdersByEmail,
-    reorder: _reorder,
-    downloadInvoice: _downloadInvoice,
-    getMonthlyRevenue: _getMonthlyRevenue,
-    getOrderStats: _getOrderStats,
-    loadMore: _loadMore,
+    updateOrder,
+    cancelOrder,
+    deleteOrder,
+    searchOrders,
+    getOrdersByEmail,
+    reorder,
+    downloadInvoice,
+    getMonthlyRevenue,
+    getOrderStats,
+    loadMore,
     clearCurrentOrder,
     clearOrders,
 
