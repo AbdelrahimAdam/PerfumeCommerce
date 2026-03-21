@@ -4,6 +4,8 @@ import { ref, watch, watchEffect } from 'vue'
 import {
   collection,
   getDocs,
+  getDoc,
+  doc,
   query,
   where,
   orderBy,
@@ -594,9 +596,9 @@ export const useProductsStore = defineStore('products', () => {
       product.description.en.toLowerCase().includes(term) ||
       product.description.ar.toLowerCase().includes(term) ||
       product.brand.toLowerCase().includes(term) ||
-      product.notes.top.some(note => note.toLowerCase().includes(term)) ||
-      product.notes.heart.some(note => note.toLowerCase().includes(term)) ||
-      product.notes.base.some(note => note.toLowerCase().includes(term)) ||
+      product.notes.top.some((note: string) => note.toLowerCase().includes(term)) ||
+      product.notes.heart.some((note: string) => note.toLowerCase().includes(term)) ||
+      product.notes.base.some((note: string) => note.toLowerCase().includes(term)) ||
       product.concentration.toLowerCase().includes(term) ||
       product.size.toLowerCase().includes(term)
     )
