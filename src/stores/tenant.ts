@@ -25,9 +25,9 @@ export const useTenantStore = defineStore('tenant', () => {
   const MAX_RETRIES = 2
   const RETRY_DELAY_MS = 1000
 
-  let resolveReady: (value: unknown) => void
+  let resolveReady: () => void
   let rejectReady: (reason?: any) => void
-  const readyPromise = new Promise((resolve, reject) => {
+  const readyPromise = new Promise<void>((resolve, reject) => {
     resolveReady = resolve
     rejectReady = reject
   })
@@ -55,7 +55,7 @@ export const useTenantStore = defineStore('tenant', () => {
             tenantDomain.value = cached.tenantDomain
             console.info('🟢 Tenant loaded from cache:', tenantId.value)
             isInitialized.value = true
-            resolveReady(true)
+            resolveReady()
             return
           } else {
             localStorage.removeItem(cacheKey)
@@ -105,7 +105,7 @@ export const useTenantStore = defineStore('tenant', () => {
       }
       localStorage.setItem(cacheKey, JSON.stringify(cacheData))
 
-      resolveReady(true)
+      resolveReady()
     } catch (err: any) {
       console.error('❌ Tenant resolution failed:', err)
       error.value = err?.message || 'Failed to resolve tenant'
@@ -132,7 +132,7 @@ export const useTenantStore = defineStore('tenant', () => {
     }
     localStorage.setItem(cacheKey, JSON.stringify(cacheData))
     console.info('🟢 Tenant set after registration:', id)
-    resolveReady(true)
+    resolveReady()
   }
 
   const refreshTenant = async (): Promise<void> => {
@@ -144,14 +144,13 @@ export const useTenantStore = defineStore('tenant', () => {
 
   const whenReady = (timeoutMs?: number): Promise<void> => {
     if (isReady.value) return Promise.resolve()
-    const promise = readyPromise as Promise<unknown>
     if (timeoutMs) {
       return Promise.race([
-        promise.then(() => undefined),
+        readyPromise,
         new Promise((_, reject) => setTimeout(() => reject(new Error('Tenant resolution timeout')), timeoutMs))
       ])
     }
-    return promise.then(() => undefined)
+    return readyPromise
   }
 
   const fetchTenantById = async (id: string): Promise<{ id: string; data: DocumentData } | null> => {
