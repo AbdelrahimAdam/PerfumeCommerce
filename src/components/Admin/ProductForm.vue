@@ -973,7 +973,7 @@ import { useBrandsStore } from '@/stores/brands'
 import { useAuthStore } from '@/stores/auth'
 import type { Product, Category, Brand } from '@/types'
 import { authNotification } from '@/utils/notifications'
-import { collection, doc, writeBatch, serverTimestamp, query, where, getDocs, orderBy, limit, updateDoc, setDoc } from 'firebase/firestore'
+import { collection, doc, writeBatch, serverTimestamp, query, where, getDocs, orderBy, limit, updateDoc } from 'firebase/firestore'
 import { db, storage } from '@/firebase/config'
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 
@@ -1184,14 +1184,6 @@ const canSave = computed(() => {
 })
 
 // Helper methods
-const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return '0 Bytes'
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
 const getCategoryDisplayName = (category: Category) => {
   if (!category) return ''
   if (typeof category === 'string') return category
