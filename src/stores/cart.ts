@@ -1,10 +1,13 @@
 // src/stores/cart.ts
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { CartItem, Product } from '@/types'
 import { useLocalStorage } from '@vueuse/core'
 import { showNotification } from '@/utils/notifications'
 import { showConfirmation } from '@/utils/confirmation'
+import { collection, doc, writeBatch, getDocs } from 'firebase/firestore'
+import { db } from '@/firebase/config'
+import { useAuthStore } from './auth'
 
 // Egyptian Pound configuration
 const CURRENCY = {
@@ -16,11 +19,14 @@ const CURRENCY = {
 }
 
 export const useCartStore = defineStore('cart', () => {
+  const authStore = useAuthStore()
+
   // State
   const items = useLocalStorage<CartItem[]>('luxury_perfume_cart', [])
   const isOpen = ref(false)
   const isLoading = ref(false)
   const lastAddedItem = ref<string | null>(null)
+  const syncing = ref(false)
 
   // Getters
   const totalItems = computed(() => 
@@ -72,17 +78,86 @@ export const useCartStore = defineStore('cart', () => {
     return formatPrice(price)
   }
 
+  // Helper to get the user's cart collection reference
+  const getUserCartRef = () => {
+    const user = authStore.user
+    if (!user) return null
+    return collection(db, 'users', user.uid, 'cart')
+  }
+
+  // Sync local cart to Firestore
+  const syncToFirestore = async () => {
+    const cartRef = getUserCartRef()
+    if (!cartRef) return
+
+    syncing.value = true
+    try {
+      const batch = writeBatch(db)
+
+      // Delete existing cart items in Firestore (replace all)
+      const existingDocs = await getDocs(cartRef)
+      existingDocs.forEach(doc => batch.delete(doc.ref))
+
+      // Add current items
+      items.value.forEach(item => {
+        const itemRef = doc(cartRef, item.id)
+        batch.set(itemRef, {
+          id: item.id,
+          name: item.name,
+          imageUrl: item.imageUrl,
+          price: item.price,
+          size: item.size,
+          concentration: item.concentration,
+          brand: item.brand,
+          quantity: item.quantity,
+          addedAt: item.addedAt,
+          updatedAt: new Date().toISOString()
+        })
+      })
+
+      await batch.commit()
+    } catch (error) {
+      console.error('Error syncing cart to Firestore:', error)
+    } finally {
+      syncing.value = false
+    }
+  }
+
+  // Load cart from Firestore and merge with local cart
+  const loadFromFirestore = async () => {
+    const cartRef = getUserCartRef()
+    if (!cartRef) return
+
+    syncing.value = true
+    try {
+      const snapshot = await getDocs(cartRef)
+      const firestoreItems: CartItem[] = snapshot.docs.map(doc => doc.data() as CartItem)
+
+      // Merge: Firestore items take precedence, but we keep local items not present in Firestore
+      const localMap = new Map(items.value.map(i => [i.id, i]))
+      const merged: CartItem[] = []
+
+      firestoreItems.forEach(fsItem => {
+        merged.push(fsItem)
+        localMap.delete(fsItem.id)
+      })
+      // Add any remaining local items (added offline)
+      merged.push(...localMap.values())
+
+      items.value = merged
+    } catch (error) {
+      console.error('Error loading cart from Firestore:', error)
+    } finally {
+      syncing.value = false
+    }
+  }
+
   // Actions
-  const addToCart = (product: Product, quantity: number = 1) => {
+  const addToCart = async (product: Product, quantity: number = 1) => {
     const existingItem = items.value.find(item => item.id === product.id)
 
     if (existingItem) {
       existingItem.quantity += quantity
-      showNotification({
-        title: 'Cart Updated',
-        message: `Increased quantity of ${product.name.en} to ${existingItem.quantity}`,
-        type: 'success'
-      })
     } else {
       const newItem: CartItem = {
         id: product.id,
@@ -96,19 +171,26 @@ export const useCartStore = defineStore('cart', () => {
         addedAt: new Date().toISOString()
       }
       items.value.push(newItem)
-      showNotification({
-        title: 'Added to Cart',
-        message: `${product.name.en} added to your luxury collection - ${formatPriceForDisplay(product.price)}`,
-        type: 'success'
-      })
     }
+
+    showNotification({
+      title: existingItem ? 'Cart Updated' : 'Added to Cart',
+      message: existingItem 
+        ? `Increased quantity of ${product.name.en} to ${existingItem.quantity}`
+        : `${product.name.en} added to your luxury collection - ${formatPriceForDisplay(product.price)}`,
+      type: 'success'
+    })
 
     lastAddedItem.value = product.id
     openCart()
     triggerLuxuryEffect()
+
+    if (authStore.isAuthenticated) {
+      await syncToFirestore()
+    }
   }
 
-  const removeFromCart = (id: string) => {
+  const removeFromCart = async (id: string) => {
     const index = items.value.findIndex(item => item.id === id)
     if (index !== -1) {
       const item = items.value[index]
@@ -118,10 +200,13 @@ export const useCartStore = defineStore('cart', () => {
         message: `${item.name.en} removed from your collection`,
         type: 'info'
       })
+      if (authStore.isAuthenticated) {
+        await syncToFirestore()
+      }
     }
   }
 
-  const updateQuantity = (id: string, quantity: number) => {
+  const updateQuantity = async (id: string, quantity: number) => {
     const item = items.value.find(item => item.id === id)
     if (item) {
       const oldQuantity = item.quantity
@@ -132,6 +217,9 @@ export const useCartStore = defineStore('cart', () => {
           message: `Changed quantity from ${oldQuantity} to ${item.quantity}`,
           type: 'info'
         })
+        if (authStore.isAuthenticated) {
+          await syncToFirestore()
+        }
       }
     }
   }
@@ -144,7 +232,7 @@ export const useCartStore = defineStore('cart', () => {
       cancelText: 'Keep Items',
       type: 'warning'
     })
-    
+
     if (confirmed) {
       items.value = []
       showNotification({
@@ -152,6 +240,9 @@ export const useCartStore = defineStore('cart', () => {
         message: 'Your luxury cart has been cleared',
         type: 'success'
       })
+      if (authStore.isAuthenticated) {
+        await syncToFirestore()
+      }
     }
   }
 
@@ -179,7 +270,7 @@ export const useCartStore = defineStore('cart', () => {
 
   const getItem = (id: string) => items.value.find(item => item.id === id)
   const hasItem = (id: string) => items.value.some(item => item.id === id)
-  
+
   const getCartSummary = () => ({
     totalItems: totalItems.value,
     subtotal: subtotal.value,
@@ -203,11 +294,10 @@ export const useCartStore = defineStore('cart', () => {
     }, 0)
   }
 
-  // Get free shipping progress
   const getFreeShippingProgress = () => {
     const remaining = Math.max(0, CURRENCY.freeShippingThreshold - subtotal.value)
     const percentage = Math.min(100, (subtotal.value / CURRENCY.freeShippingThreshold) * 100)
-    
+
     return {
       remaining,
       remainingFormatted: formatPrice(remaining),
@@ -217,23 +307,29 @@ export const useCartStore = defineStore('cart', () => {
     }
   }
 
-  // Check if free shipping is available
   const hasFreeShipping = computed(() => subtotal.value > CURRENCY.freeShippingThreshold)
 
-  // ✅ Restore cart method (for main.ts)
+  // Restore cart method (for main.ts)
   const restoreCart = () => {
-    const saved = localStorage.getItem('luxury_perfume_cart')
-    if (saved) {
-      try {
-        items.value = JSON.parse(saved)
-      } catch {
-        items.value = []
-      }
+    // No need to restore from localStorage separately – useLocalStorage handles it.
+    // If the user is authenticated, load from Firestore as well.
+    if (authStore.isAuthenticated) {
+      loadFromFirestore().catch(console.error)
     }
   }
 
-  // Initialize automatically if needed
-  const initialize = () => restoreCart()
+  const initialize = async () => {
+    if (authStore.isAuthenticated) {
+      await loadFromFirestore()
+    }
+  }
+
+  // Watch for auth changes to reload from Firestore
+  watch(() => authStore.isAuthenticated, async (isAuth) => {
+    if (isAuth) {
+      await loadFromFirestore()
+    }
+  }, { immediate: true })
 
   return {
     // State
@@ -241,6 +337,7 @@ export const useCartStore = defineStore('cart', () => {
     isOpen,
     isLoading,
     lastAddedItem,
+    syncing,
 
     // Basic getters
     totalItems,
