@@ -144,13 +144,14 @@ export const useTenantStore = defineStore('tenant', () => {
 
   const whenReady = (timeoutMs?: number): Promise<void> => {
     if (isReady.value) return Promise.resolve()
+    const promise = readyPromise as Promise<unknown>
     if (timeoutMs) {
       return Promise.race([
-        readyPromise as Promise<void>,
+        promise.then(() => undefined),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Tenant resolution timeout')), timeoutMs))
       ])
     }
-    return readyPromise as Promise<void>
+    return promise.then(() => undefined)
   }
 
   const fetchTenantById = async (id: string): Promise<{ id: string; data: DocumentData } | null> => {
