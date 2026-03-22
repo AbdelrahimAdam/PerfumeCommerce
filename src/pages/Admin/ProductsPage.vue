@@ -296,7 +296,7 @@
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {{ t('Actions') }}
                 </th>
-              </tr>
+               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr 
@@ -412,7 +412,7 @@
                     <button
                       @click="confirmDelete(product)"
                       class="text-red-600 hover:text-red-800"
-                      :title="t('Delete (local only)')"
+                      :title="t('Delete product')"
                     >
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -481,10 +481,6 @@
           "<span class="font-medium">{{ getProductName(productToDelete) }}</span>"?
           {{ t('This action cannot be undone.') }}
         </p>
-        <p class="text-xs text-yellow-600 mb-5">
-          <strong>Note:</strong> This will only delete from local state. 
-          The product will return on next refresh from Firebase.
-        </p>
         <div class="flex justify-end gap-3">
           <button
             @click="showDeleteModal = false"
@@ -494,13 +490,13 @@
             {{ t('Cancel') }}
           </button>
           <button
-            @click="deleteProductLocal"
+            @click="deleteProductPermanent"
             :disabled="deleting"
             class="px-4 py-2 bg-red-600 text-white rounded-lg font-medium 
                    hover:bg-red-700 transition-colors disabled:opacity-50 
                    disabled:cursor-not-allowed text-sm"
           >
-            <span v-if="!deleting">{{ t('Delete Locally') }}</span>
+            <span v-if="!deleting">{{ t('Delete Permanently') }}</span>
             <span v-else class="flex items-center gap-2">
               <svg class="animate-spin w-4 h-4" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -1097,17 +1093,27 @@ const confirmDelete = (product: Product) => {
   showDeleteModal.value = true
 }
 
-const deleteProductLocal = async () => {
+// Permanent delete using the store
+const deleteProductPermanent = async () => {
   if (!productToDelete.value) return
   deleting.value = true
   try {
-    const index = productsStore.products.findIndex(p => p.id === productToDelete.value!.id)
-    if (index !== -1) productsStore.products.splice(index, 1)
-    showDeleteModal.value = false
-    productToDelete.value = null
-    showMessage(t('Product removed from local state. It will return on next refresh from Firebase.'), 'info')
-  } catch {
-    showMessage(t('Failed to delete product'), 'error')
+    const success = await productsStore.deleteProduct(
+      productToDelete.value.id,
+      productToDelete.value.brandId
+    )
+    if (success) {
+      showDeleteModal.value = false
+      productToDelete.value = null
+      // Optionally refresh to ensure UI consistency
+      await refreshProducts()
+      showMessage(t('Product deleted permanently from Firebase'), 'success')
+    } else {
+      throw new Error('Delete failed')
+    }
+  } catch (error: any) {
+    console.error('Error deleting product:', error)
+    showMessage(t('Failed to delete product: ') + (error.message || t('Unknown error')), 'error')
   } finally {
     deleting.value = false
   }
