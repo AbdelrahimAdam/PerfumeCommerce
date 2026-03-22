@@ -5,7 +5,7 @@
 
     <div class="flex min-h-screen items-end justify-center p-4 text-center sm:items-center sm:p-0">
       <!-- Modal panel -->
-      <div class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+      <div class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg w-full max-w-md mx-auto">
         <!-- Modal header -->
         <div class="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
           <div class="sm:flex sm:items-start">
@@ -31,7 +31,7 @@
         </div>
 
         <!-- Modal content -->
-        <div class="px-4 pb-3 sm:px-6">
+        <div class="px-4 pb-3 sm:px-6 max-h-[calc(100vh-200px)] overflow-y-auto">
           <div class="space-y-4">
             <!-- Offer Title -->
             <div>
@@ -68,33 +68,62 @@
               <p class="mt-1 text-xs text-gray-500">{{ t('Used in the URL: /offer/[slug]') }}</p>
             </div>
 
-            <!-- Image URL -->
+            <!-- Image Upload Section (URL + File Upload) -->
             <div>
-              <label for="offer-image" class="block text-sm font-medium text-gray-700 mb-1">
-                {{ t('Image URL') }} *
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                {{ t('Offer Image') }} *
               </label>
-              <div class="flex gap-2">
-                <input
-                  id="offer-image"
-                  v-model="formData.imageUrl"
-                  type="text"
-                  placeholder="https://example.com/offer.jpg"
-                  class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                  :class="{ 'border-red-300': errors.imageUrl }"
-                  required
-                />
-                <button
-                  type="button"
-                  @click="previewImage(formData.imageUrl)"
-                  class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  {{ t('Preview') }}
-                </button>
+
+              <!-- URL Input -->
+              <div class="mb-3">
+                <label class="block text-xs text-gray-600 mb-1">{{ t('Image URL (optional)') }}</label>
+                <div class="flex flex-col sm:flex-row gap-2">
+                  <input
+                    v-model="formData.imageUrl"
+                    type="text"
+                    placeholder="https://example.com/offer.jpg"
+                    class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    :class="{ 'border-red-300': errors.imageUrl }"
+                  />
+                  <button
+                    type="button"
+                    @click="previewImage(formData.imageUrl)"
+                    class="inline-flex items-center justify-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 whitespace-nowrap"
+                  >
+                    {{ t('Preview') }}
+                  </button>
+                </div>
               </div>
+
+              <!-- File Upload -->
+              <div class="mb-3">
+                <label class="block text-xs text-gray-600 mb-1">{{ t('Or Upload Image') }}</label>
+                <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                  <input
+                    ref="offerImageInput"
+                    type="file"
+                    accept="image/*"
+                    @change="handleImageUpload"
+                    class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 cursor-pointer"
+                  />
+                  <button
+                    v-if="imageFile || formData.imageUrl"
+                    @click="removeImage"
+                    type="button"
+                    class="inline-flex items-center justify-center px-3 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50 text-sm whitespace-nowrap"
+                  >
+                    {{ t('Remove') }}
+                  </button>
+                </div>
+                <p class="mt-1 text-xs text-gray-500">
+                  {{ t('Images will be stored in Firebase Storage (no size limit). JPG, PNG, GIF recommended.') }}
+                </p>
+              </div>
+
               <p v-if="errors.imageUrl" class="mt-1 text-sm text-red-600">{{ errors.imageUrl }}</p>
-              
+
               <!-- Image Preview -->
-              <div v-if="imagePreview" class="mt-2">
+              <div v-if="imagePreview" class="mt-3">
                 <p class="text-sm text-gray-600 mb-1">{{ t('Image Preview') }}:</p>
                 <div class="relative h-40 w-full border border-gray-300 rounded-md overflow-hidden">
                   <img
@@ -103,6 +132,13 @@
                     class="h-full w-full object-cover"
                     @error="handleImageError"
                   />
+                  <button
+                    @click="clearImagePreview"
+                    class="absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600"
+                    :title="t('Clear')"
+                  >
+                    ×
+                  </button>
                 </div>
               </div>
             </div>
@@ -139,7 +175,7 @@
             </div>
 
             <!-- Prices -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label for="offer-old-price" class="block text-sm font-medium text-gray-700 mb-1">
                   {{ t('Old Price') }} ({{ t('currencyLE') }}) *
@@ -205,7 +241,7 @@
             </div>
 
             <!-- Validity Period -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label for="offer-start-date" class="block text-sm font-medium text-gray-700 mb-1">
                   {{ t('Start Date') }}
@@ -284,7 +320,7 @@
                 {{ t('Status') }}
               </label>
               <div class="flex items-center gap-4">
-                <label class="inline-flex items-center">
+                <label class="inline-flex items-center min-h-[44px]">
                   <input
                     v-model="formData.active"
                     type="radio"
@@ -293,7 +329,7 @@
                   />
                   <span class="ml-2 text-sm text-gray-700">{{ t('Active') }}</span>
                 </label>
-                <label class="inline-flex items-center">
+                <label class="inline-flex items-center min-h-[44px]">
                   <input
                     v-model="formData.active"
                     type="radio"
@@ -313,7 +349,7 @@
             type="button"
             @click="save"
             :disabled="loading"
-            class="inline-flex w-full justify-center rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 sm:ml-3 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+            class="inline-flex w-full justify-center rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 sm:ml-3 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
           >
             <template v-if="loading">
               <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
@@ -330,7 +366,7 @@
             type="button"
             @click="close"
             :disabled="loading"
-            class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+            class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
           >
             {{ t('Cancel') }}
           </button>
@@ -343,8 +379,12 @@
 <script setup lang="ts">
 import { ref, reactive, watch, computed, onMounted } from 'vue'
 import { useLanguageStore } from '@/stores/language'
+import { useAuthStore } from '@/stores/auth'
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
+import { storage } from '@/firebase/config'
 
 const languageStore = useLanguageStore()
+const authStore = useAuthStore()
 const { t } = languageStore
 
 const props = defineProps<{
@@ -362,6 +402,7 @@ const formData = reactive({
   slug: '',
   title: '',
   imageUrl: '',
+  imageFile: null as File | null,
   linkUrl: '',
   subtitle: '',
   oldPrice: 0,
@@ -384,9 +425,35 @@ const errors = reactive({
 })
 const loading = ref(false)
 const imagePreview = ref('')
+const imageFile = ref<File | null>(null)
+const offerImageInput = ref<HTMLInputElement | null>(null)
 const editing = computed(() => !!props.offer?.id)
 
-// Computed properties
+// Helper: Upload image to Firebase Storage
+const uploadOfferImage = async (file: File, offerId: string): Promise<string> => {
+  const path = `offers/${offerId}/main.jpg`
+  const imageRef = storageRef(storage, path)
+  await uploadBytes(imageRef, file)
+  return await getDownloadURL(imageRef)
+}
+
+// Helper: Delete image from Storage
+const deleteOfferImageFromStorage = async (imageUrl: string) => {
+  if (!imageUrl || !imageUrl.includes('firebasestorage.googleapis.com')) return
+  try {
+    const decodedUrl = decodeURIComponent(imageUrl)
+    const match = decodedUrl.match(/\/o\/(.+?)\?/)
+    if (match && match[1]) {
+      const path = decodeURIComponent(match[1])
+      const imageRef = storageRef(storage, path)
+      await deleteObject(imageRef)
+    }
+  } catch (err) {
+    console.warn('Failed to delete offer image from Storage:', err)
+  }
+}
+
+// Computed
 const calculateDiscount = computed(() => {
   if (!formData.oldPrice || !formData.newPrice || formData.oldPrice <= 0) return 0
   const discount = ((formData.oldPrice - formData.newPrice) / formData.oldPrice) * 100
@@ -423,7 +490,7 @@ onMounted(() => {
 watch(() => formData.imageUrl, (newUrl) => {
   if (newUrl && isValidUrl(newUrl)) {
     imagePreview.value = newUrl
-  } else {
+  } else if (!imageFile.value) {
     imagePreview.value = ''
   }
 })
@@ -446,9 +513,40 @@ const previewImage = (url: string) => {
   }
 }
 
-const handleImageError = () => {
-  alert(t('Failed to load image. Please check the URL.'))
+const handleImageUpload = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (!input.files || !input.files[0]) return
+  const file = input.files[0]
+  imageFile.value = file
+  // Clear URL field and preview from URL
+  formData.imageUrl = ''
+  // Show local preview
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    imagePreview.value = e.target?.result as string
+  }
+  reader.readAsDataURL(file)
+  // Clear any image URL errors
+  if (errors.imageUrl) errors.imageUrl = ''
+}
+
+const removeImage = () => {
+  imageFile.value = null
+  formData.imageUrl = ''
   imagePreview.value = ''
+  if (offerImageInput.value) {
+    offerImageInput.value.value = ''
+  }
+}
+
+const clearImagePreview = () => {
+  removeImage()
+}
+
+const handleImageError = () => {
+  alert(t('Failed to load image. Please check the URL or upload a new image.'))
+  imagePreview.value = ''
+  formData.imageUrl = ''
 }
 
 const validateForm = () => {
@@ -474,11 +572,11 @@ const validateForm = () => {
     isValid = false
   }
   
-  // Validate image URL
-  if (!formData.imageUrl.trim()) {
-    errors.imageUrl = t('Image URL is required')
+  // Validate image: either URL or file must be present
+  if (!formData.imageUrl && !imageFile.value) {
+    errors.imageUrl = t('Offer image is required (URL or upload)')
     isValid = false
-  } else if (!isValidUrl(formData.imageUrl)) {
+  } else if (formData.imageUrl && !isValidUrl(formData.imageUrl)) {
     errors.imageUrl = t('Please enter a valid URL')
     isValid = false
   }
@@ -516,20 +614,32 @@ const save = async () => {
   loading.value = true
   
   try {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    // If an image file was selected, upload it first
+    let finalImageUrl = formData.imageUrl
+    if (imageFile.value) {
+      // Generate a temporary ID if it's a new offer (no ID yet)
+      const tempId = formData.id || Date.now().toString()
+      finalImageUrl = await uploadOfferImage(imageFile.value, tempId)
+    } else if (editing.value && formData.imageUrl !== props.offer?.imageUrl) {
+      // If the image URL changed and we are editing, and it's not a Storage URL, we may need to delete old?
+      // For simplicity, we keep existing URL.
+    }
     
-    // Calculate discount percentage
-    const discount = calculateDiscount.value
-    
-    // Emit the form data with discount and savings
-    emit('save', { 
-      ...formData, 
-      discount,
+    // Prepare data to emit
+    const offerData = {
+      ...formData,
+      imageUrl: finalImageUrl,
+      imageFile: undefined, // remove file object
+      discount: calculateDiscount.value,
       savings: formData.oldPrice - formData.newPrice
-    })
+    }
     
-    // Close modal
+    // If editing and we uploaded a new image, delete the old one from Storage
+    if (editing.value && imageFile.value && props.offer?.imageUrl) {
+      await deleteOfferImageFromStorage(props.offer.imageUrl)
+    }
+    
+    emit('save', offerData)
     emit('close')
   } catch (error) {
     console.error('Error saving offer:', error)
@@ -587,6 +697,11 @@ onMounted(() => {
   outline-offset: 2px;
 }
 
+/* Touch-friendly buttons */
+button, input, select, textarea {
+  min-height: 44px;
+}
+
 /* Dark mode support */
 @media (prefers-color-scheme: dark) {
   .bg-white {
@@ -635,6 +750,27 @@ onMounted(() => {
   
   .hover\:bg-gray-50:hover {
     background-color: #4b5563;
+  }
+}
+
+/* Mobile optimizations */
+@media (max-width: 640px) {
+  .px-4 {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
+  .sm\:px-6 {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
+  .space-y-4 > * + * {
+    margin-top: 1rem;
+  }
+  
+  .grid {
+    gap: 0.75rem;
   }
 }
 </style>
