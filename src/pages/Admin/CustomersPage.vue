@@ -52,7 +52,7 @@
         </svg>
       </div>
       <h3 class="text-xl font-bold text-gray-900 mb-2">{{ t('Error loading customers') }}</h3>
-      <p class="text-gray-600 mb-4">{{ error }}</p>
+      <p class="text-gray-600 mb-4 whitespace-pre-line">{{ error }}</p>
       <button
         @click="loadCustomers"
         class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 min-h-[44px]"
@@ -235,7 +235,7 @@
               <th class="py-3 px-4 text-left text-sm font-semibold text-gray-700">{{ t('Last Order') }}</th>
               <th class="py-3 px-4 text-left text-sm font-semibold text-gray-700">{{ t('Status') }}</th>
               <th class="py-3 px-4 text-left text-sm font-semibold text-gray-700">{{ t('Actions') }}</th>
-            </tr>
+             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200">
             <tr v-for="customer in paginatedCustomers" :key="customer.id" class="hover:bg-gray-50">
@@ -548,7 +548,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLanguageStore } from '@/stores/language'
 import { useAuthStore } from '@/stores/auth'
-import { collection, getDocs, query, orderBy, limit, where, doc, deleteDoc, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore'
+import { collection, getDocs, query, orderBy, limit, where, doc, deleteDoc } from 'firebase/firestore'
 import { db } from '@/firebase/config'
 import { showConfirmation } from '@/utils/confirmation'
 import debounce from 'lodash/debounce'
@@ -574,8 +574,6 @@ const selectedCustomers = ref<string[]>([])
 const selectedCustomer = ref<any | null>(null)
 const customerOrders = ref<any[]>([])
 const showOrdersModal = ref(false)
-const lastVisible = ref<QueryDocumentSnapshot<DocumentData> | null>(null)
-const hasMore = ref(true)
 
 const pagination = ref({
   page: 1,
@@ -698,26 +696,39 @@ const loadOrders = async () => {
 
   try {
     const ordersCollection = collection(db, 'orders')
-    const q = query(
-      ordersCollection,
-      where('tenantId', '==', tenantId),
-      orderBy('createdAt', 'desc')
-    )
-    const querySnapshot = await getDocs(q)
-    
-    allOrders.value = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }))
+    let q
+    try {
+      q = query(
+        ordersCollection,
+        where('tenantId', '==', tenantId),
+        orderBy('createdAt', 'desc')
+      )
+      const querySnapshot = await getDocs(q)
+      allOrders.value = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }))
+    } catch (err: any) {
+      if (err.message && err.message.includes('requires an index')) {
+        console.warn('Orders index missing, using fallback query without ordering')
+        q = query(ordersCollection, where('tenantId', '==', tenantId))
+        const querySnapshot = await getDocs(q)
+        allOrders.value = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        error.value = 'Note: Orders are not sorted. Please create the required index in Firebase Console for better performance.'
+      } else {
+        throw err
+      }
+    }
     
     // Group orders by user
     const ordersByUser: Record<string, any[]> = {}
     allOrders.value.forEach(order => {
       const userId = order.userId
       if (userId) {
-        if (!ordersByUser[userId]) {
-          ordersByUser[userId] = []
-        }
+        if (!ordersByUser[userId]) ordersByUser[userId] = []
         ordersByUser[userId].push(order)
       }
     })
@@ -742,14 +753,30 @@ const loadCustomers = async () => {
 
   try {
     const customersCollection = collection(db, 'customers')
-    // Add tenant filter
-    const q = query(
-      customersCollection,
-      where('tenantId', '==', tenantId),
-      orderBy('createdAt', 'desc'),
-      limit(50)
-    )
-    const querySnapshot = await getDocs(q)
+    let q
+    let querySnapshot
+    try {
+      q = query(
+        customersCollection,
+        where('tenantId', '==', tenantId),
+        orderBy('createdAt', 'desc'),
+        limit(50)
+      )
+      querySnapshot = await getDocs(q)
+    } catch (err: any) {
+      if (err.message && err.message.includes('requires an index')) {
+        console.warn('Customers index missing, using fallback query without ordering')
+        q = query(
+          customersCollection,
+          where('tenantId', '==', tenantId),
+          limit(50)
+        )
+        querySnapshot = await getDocs(q)
+        error.value = 'Note: Customers are not sorted. Please create the required composite index in Firebase Console for better performance.'
+      } else {
+        throw err
+      }
+    }
     
     const ordersByUser = await loadOrders()
     
@@ -767,9 +794,7 @@ const loadCustomers = async () => {
       if (data.lastLogin) {
         const lastLogin = data.lastLogin.toDate?.() || new Date(data.lastLogin)
         const daysSinceLastLogin = Math.floor((Date.now() - lastLogin.getTime()) / (1000 * 60 * 60 * 24))
-        if (daysSinceLastLogin > 30) {
-          status = 'inactive'
-        }
+        if (daysSinceLastLogin > 30) status = 'inactive'
       }
       
       return {
@@ -786,18 +811,12 @@ const loadCustomers = async () => {
       }
     })
     
-    // Update lastVisible for pagination
-    lastVisible.value = querySnapshot.docs[querySnapshot.docs.length - 1]
-    hasMore.value = querySnapshot.docs.length === 50
-    
     // Calculate stats
     await calculateStats()
     
   } catch (err: any) {
     console.error('Error loading customers:', err)
     error.value = err.message || 'Failed to load customers'
-    // Use a simple notification that works (the component doesn't have a proper notification system)
-    console.error('Failed to load customers:', error.value)
   } finally {
     loading.value = false
   }
@@ -869,9 +888,7 @@ const viewAllOrders = (customer: any) => {
 }
 
 const editCustomer = (customer: any) => {
-  // Implement edit functionality
   console.log('Edit customer:', customer)
-  // Show a simple alert for now (since notification system is not fully integrated)
   alert(t('Edit functionality coming soon'))
 }
 
@@ -899,7 +916,6 @@ const deleteCustomer = async (id: string) => {
 
 const exportCustomers = () => {
   try {
-    // Convert customers to CSV
     const headers = ['ID', 'Name', 'Email', 'Phone', 'Orders', 'Total Spent', 'Last Order', 'Status', 'Created At']
     const csvData = filteredCustomers.value.map(customer => [
       customer.id,
@@ -918,7 +934,6 @@ const exportCustomers = () => {
       ...csvData.map(row => row.map(cell => `"${cell}"`).join(','))
     ].join('\n')
 
-    // Create download link
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
