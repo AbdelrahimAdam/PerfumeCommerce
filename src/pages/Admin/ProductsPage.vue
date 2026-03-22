@@ -296,7 +296,7 @@
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {{ t('Actions') }}
                 </th>
-               </tr>
+              </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr 
@@ -1095,7 +1095,14 @@ const confirmDelete = (product: Product) => {
 
 // Permanent delete using the store
 const deleteProductPermanent = async () => {
-  if (!productToDelete.value) return
+  if (!productToDelete.value) {
+    showMessage(t('No product selected'), 'error')
+    return
+  }
+  if (!productToDelete.value.brandId) {
+    showMessage(t('Product brand ID missing, cannot delete'), 'error')
+    return
+  }
   deleting.value = true
   try {
     const success = await productsStore.deleteProduct(
@@ -1105,7 +1112,6 @@ const deleteProductPermanent = async () => {
     if (success) {
       showDeleteModal.value = false
       productToDelete.value = null
-      // Optionally refresh to ensure UI consistency
       await refreshProducts()
       showMessage(t('Product deleted permanently from Firebase'), 'success')
     } else {
