@@ -1,45 +1,45 @@
 <!-- src/pages/Admin/CustomersPage.vue -->
 <template>
-  <div class="customers-page p-6">
+  <div class="customers-page p-4 sm:p-6">
     <!-- Page Header -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between mb-6">
+    <div class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
       <div>
-        <h1 class="text-2xl font-bold text-gray-800 mb-2">{{ t('Customers') }}</h1>
+        <h1 class="text-2xl font-bold text-gray-800 mb-1">{{ t('Customers') }}</h1>
         <p class="text-gray-600">{{ t('Manage all registered customers') }}</p>
       </div>
-      
-      <div class="flex items-center gap-3 mt-4 md:mt-0">
+
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
         <!-- Search -->
         <div class="relative">
           <input
             v-model="searchQuery"
             type="text"
             :placeholder="t('Search customers...')"
-            class="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gold-500 focus:border-gold-500 w-full md:w-64"
+            class="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-64"
             @input="debouncedSearch"
           >
           <svg class="absolute left-3 top-2.5 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
           </svg>
         </div>
-        
+
         <!-- Export Button -->
         <button 
           @click="exportCustomers"
-          :disabled="loading || customersWithOrders.length === 0"
-          class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="loading || filteredCustomers.length === 0"
+          class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
           </svg>
-          {{ t('Export') }}
+          <span class="hidden sm:inline">{{ t('Export') }}</span>
         </button>
       </div>
     </div>
 
     <!-- Loading State -->
     <div v-if="loading && customers.length === 0" class="text-center py-12">
-      <div class="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gold-500"></div>
+      <div class="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
       <p class="text-gray-600 mt-4">{{ t('Loading customers...') }}</p>
     </div>
 
@@ -55,14 +55,14 @@
       <p class="text-gray-600 mb-4">{{ error }}</p>
       <button
         @click="loadCustomers"
-        class="px-4 py-2 bg-gold-500 text-white rounded-lg hover:bg-gold-600"
+        class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 min-h-[44px]"
       >
         {{ t('Try Again') }}
       </button>
     </div>
 
     <!-- Stats Cards -->
-    <div v-else class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
       <div class="bg-white rounded-xl p-4 shadow border">
         <div class="flex items-center justify-between">
           <div>
@@ -134,13 +134,97 @@
 
     <!-- Customers Table -->
     <div v-if="!loading" class="bg-white rounded-xl shadow border overflow-hidden">
-      <div class="overflow-x-auto">
+      <!-- Mobile card view (visible on small screens) -->
+      <div class="block md:hidden">
+        <div v-for="customer in paginatedCustomers" :key="customer.id" class="p-4 border-b last:border-0">
+          <div class="flex items-start gap-3">
+            <input 
+              type="checkbox" 
+              class="mt-1 w-4 h-4 rounded border-gray-300"
+              v-model="selectedCustomers"
+              :value="customer.id"
+            >
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold">
+                  <span>{{ getInitials(customer.name || customer.displayName || 'Customer') }}</span>
+                </div>
+                <div>
+                  <p class="font-medium">{{ customer.name || customer.displayName || 'N/A' }}</p>
+                  <p class="text-xs text-gray-500">ID: {{ customer.id.slice(0, 8) }}</p>
+                </div>
+              </div>
+              <div class="mt-2 space-y-1 text-sm">
+                <p><span class="font-medium text-gray-600">{{ t('Email') }}:</span> {{ customer.email }}</p>
+                <p><span class="font-medium text-gray-600">{{ t('Phone') }}:</span> {{ customer.phone || '-' }}</p>
+                <p><span class="font-medium text-gray-600">{{ t('Orders') }}:</span> {{ customer.orders || 0 }}</p>
+                <p><span class="font-medium text-gray-600">{{ t('Total Spent') }}:</span> {{ formatCurrency(customer.totalSpent || 0) }}</p>
+                <p><span class="font-medium text-gray-600">{{ t('Last Order') }}:</span> {{ customer.lastOrder ? formatDate(customer.lastOrder) : t('Never') }}</p>
+                <div class="flex items-center gap-2 mt-2">
+                  <span :class="[
+                    'px-2 py-0.5 rounded-full text-xs font-medium',
+                    customer.status === 'active' 
+                      ? 'bg-green-100 text-green-800'
+                      : customer.status === 'inactive'
+                        ? 'bg-gray-100 text-gray-800'
+                        : 'bg-yellow-100 text-yellow-800'
+                  ]">
+                    {{ getStatusText(customer.status) }}
+                  </span>
+                  <div class="flex gap-1 ml-auto">
+                    <button 
+                      @click="viewCustomer(customer)"
+                      class="p-2 text-gray-500 hover:text-blue-600 transition-colors"
+                      :title="t('View Details')"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                      </svg>
+                    </button>
+                    <button 
+                      @click="editCustomer(customer)"
+                      class="p-2 text-gray-500 hover:text-yellow-600 transition-colors"
+                      :title="t('Edit')"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                      </svg>
+                    </button>
+                    <button 
+                      @click="viewCustomerOrders(customer)"
+                      class="p-2 text-gray-500 hover:text-purple-600 transition-colors"
+                      :title="t('View Orders')"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                      </svg>
+                    </button>
+                    <button 
+                      @click="deleteCustomer(customer.id)"
+                      class="p-2 text-gray-500 hover:text-red-600 transition-colors"
+                      :title="t('Delete')"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Desktop table view -->
+      <div class="hidden md:block overflow-x-auto">
         <table class="w-full">
           <thead class="bg-gray-50">
             <tr>
               <th class="py-3 px-4 text-left text-sm font-semibold text-gray-700">
                 <div class="flex items-center gap-2">
-                  <input type="checkbox" class="rounded border-gray-300" v-model="selectAll">
+                  <input type="checkbox" class="rounded border-gray-300 w-4 h-4" v-model="selectAll">
                   {{ t('Customer') }}
                 </div>
               </th>
@@ -159,11 +243,11 @@
                 <div class="flex items-center gap-3">
                   <input 
                     type="checkbox" 
-                    class="rounded border-gray-300"
+                    class="rounded border-gray-300 w-4 h-4"
                     v-model="selectedCustomers"
                     :value="customer.id"
                   >
-                  <div class="w-10 h-10 rounded-full bg-gradient-to-br from-gold-500 to-gold-600 flex items-center justify-center text-white font-bold">
+                  <div class="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold">
                     <span>{{ getInitials(customer.name || customer.displayName || 'Customer') }}</span>
                   </div>
                   <div>
@@ -260,7 +344,7 @@
       </div>
 
       <!-- Pagination -->
-      <div v-if="filteredCustomers.length > 0" class="px-6 py-4 border-t flex items-center justify-between">
+      <div v-if="filteredCustomers.length > 0" class="px-6 py-4 border-t flex flex-col sm:flex-row items-center justify-between gap-3">
         <p class="text-sm text-gray-700">
           {{ t('Showing') }} 
           <span class="font-medium">{{ startIndex + 1 }}</span>
@@ -274,14 +358,14 @@
           <button 
             @click="prevPage"
             :disabled="pagination.page === 1"
-            class="px-3 py-1 border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            class="px-3 py-1 border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 min-h-[36px] min-w-[44px]"
           >
             {{ t('Previous') }}
           </button>
           <button 
             @click="nextPage"
             :disabled="endIndex >= filteredCustomers.length"
-            class="px-3 py-1 border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            class="px-3 py-1 border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 min-h-[36px] min-w-[44px]"
           >
             {{ t('Next') }}
           </button>
@@ -311,10 +395,10 @@
             </button>
           </div>
         </div>
-        
+
         <div class="p-6" v-if="selectedCustomer">
           <div class="flex items-center gap-4 mb-6">
-            <div class="w-16 h-16 rounded-full bg-gradient-to-br from-gold-500 to-gold-600 flex items-center justify-center text-white text-xl font-bold">
+            <div class="w-16 h-16 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white text-xl font-bold">
               {{ getInitials(selectedCustomer.name || selectedCustomer.displayName || 'Customer') }}
             </div>
             <div>
@@ -375,7 +459,7 @@
               <button 
                 v-if="selectedCustomer.recentOrders.length > 3"
                 @click="viewAllOrders(selectedCustomer)"
-                class="text-sm text-gold-600 hover:text-gold-700 font-medium"
+                class="text-sm text-primary-600 hover:text-primary-700 font-medium"
               >
                 {{ t('View all orders') }} →
               </button>
@@ -391,7 +475,7 @@
                 <p class="text-sm text-gray-600">{{ address.address }}</p>
                 <p class="text-sm text-gray-600">{{ address.city }}, {{ address.country }}</p>
                 <p class="text-sm text-gray-600">{{ address.phone }}</p>
-                <span v-if="address.isDefault" class="text-xs text-gold-600 font-medium mt-2 inline-block">
+                <span v-if="address.isDefault" class="text-xs text-primary-600 font-medium mt-2 inline-block">
                   {{ t('Default Address') }}
                 </span>
               </div>
@@ -423,7 +507,7 @@
             </button>
           </div>
         </div>
-        
+
         <div class="p-6">
           <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200">
@@ -458,43 +542,22 @@
     </div>
   </div>
 </template>
+
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLanguageStore } from '@/stores/language'
 import { useAuthStore } from '@/stores/auth'
-import { collection, getDocs, query, orderBy, limit, doc, deleteDoc } from 'firebase/firestore' // Removed startAfter
+import { collection, getDocs, query, orderBy, limit, startAfter, where, doc, deleteDoc, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore'
 import { db } from '@/firebase/config'
 import { showConfirmation } from '@/utils/confirmation'
 import debounce from 'lodash/debounce'
-
-// Fixed notification function with proper type handling
-const showNotification = (message: string, type: 'info' | 'success' | 'error' | 'warning' = 'info') => {
-  try {
-    import('@/utils/notifications').then(module => {
-      const authNotification = module.authNotification
-      if (type === 'error' && authNotification.error) {
-        authNotification.error(message)
-      } else if ((type === 'success' || type === 'info') && authNotification.loggedIn) {
-        authNotification.loggedIn(message)
-      } else if (type === 'warning') {
-        console.warn(message)
-      } else {
-        console.log(`[${type.toUpperCase()}] ${message}`)
-      }
-    }).catch(() => {
-      console.log(`[${type.toUpperCase()}] ${message}`)
-    })
-  } catch (error) {
-    console.log(`[${type.toUpperCase()}] ${message}`)
-  }
-}
 
 const router = useRouter()
 const languageStore = useLanguageStore()
 const authStore = useAuthStore()
 
-// ✅ Admin guard
+// Admin guard
 if (!authStore.isAdmin) {
   router.push('/admin')
 }
@@ -511,7 +574,7 @@ const selectedCustomers = ref<string[]>([])
 const selectedCustomer = ref<any | null>(null)
 const customerOrders = ref<any[]>([])
 const showOrdersModal = ref(false)
-const lastVisible = ref<any>(null)
+const lastVisible = ref<QueryDocumentSnapshot<DocumentData> | null>(null)
 const hasMore = ref(true)
 
 const pagination = ref({
@@ -627,9 +690,19 @@ const getStatusClasses = (status: string) => {
 }
 
 const loadOrders = async () => {
+  const tenantId = authStore.currentTenant
+  if (!tenantId) {
+    console.warn('No tenant ID – cannot load orders')
+    return {}
+  }
+
   try {
     const ordersCollection = collection(db, 'orders')
-    const q = query(ordersCollection, orderBy('createdAt', 'desc'))
+    const q = query(
+      ordersCollection,
+      where('tenantId', '==', tenantId),
+      orderBy('createdAt', 'desc')
+    )
     const querySnapshot = await getDocs(q)
     
     allOrders.value = querySnapshot.docs.map(doc => ({
@@ -660,9 +733,22 @@ const loadCustomers = async () => {
   loading.value = true
   error.value = null
   
+  const tenantId = authStore.currentTenant
+  if (!tenantId) {
+    error.value = 'Tenant not resolved. Cannot load customers.'
+    loading.value = false
+    return
+  }
+
   try {
     const customersCollection = collection(db, 'customers')
-    const q = query(customersCollection, orderBy('createdAt', 'desc'), limit(50))
+    // Add tenant filter
+    const q = query(
+      customersCollection,
+      where('tenantId', '==', tenantId),
+      orderBy('createdAt', 'desc'),
+      limit(50)
+    )
     const querySnapshot = await getDocs(q)
     
     const ordersByUser = await loadOrders()
@@ -710,7 +796,8 @@ const loadCustomers = async () => {
   } catch (err: any) {
     console.error('Error loading customers:', err)
     error.value = err.message || 'Failed to load customers'
-    showNotification(error.value || 'Unknown error', 'error')
+    // Use a simple notification that works (the component doesn't have a proper notification system)
+    console.error('Failed to load customers:', error.value)
   } finally {
     loading.value = false
   }
@@ -763,8 +850,6 @@ const calculateStats = async () => {
     : 0
 }
 
-// Removed unused loadMore function
-
 const viewCustomer = (customer: any) => {
   selectedCustomer.value = customer
 }
@@ -786,7 +871,8 @@ const viewAllOrders = (customer: any) => {
 const editCustomer = (customer: any) => {
   // Implement edit functionality
   console.log('Edit customer:', customer)
-  showNotification('Edit functionality coming soon', 'info')
+  // Show a simple alert for now (since notification system is not fully integrated)
+  alert(t('Edit functionality coming soon'))
 }
 
 const deleteCustomer = async (id: string) => {
@@ -803,10 +889,10 @@ const deleteCustomer = async (id: string) => {
       await deleteDoc(doc(db, 'customers', id))
       customers.value = customers.value.filter(c => c.id !== id)
       selectedCustomers.value = selectedCustomers.value.filter(cId => cId !== id)
-      showNotification(t('Customer deleted successfully'), 'success')
+      alert(t('Customer deleted successfully'))
     } catch (err) {
       console.error('Error deleting customer:', err)
-      showNotification(t('Failed to delete customer'), 'error')
+      alert(t('Failed to delete customer'))
     }
   }
 }
@@ -841,10 +927,10 @@ const exportCustomers = () => {
     link.click()
     URL.revokeObjectURL(url)
     
-    showNotification(t('Customers exported successfully'), 'success')
+    alert(t('Customers exported successfully'))
   } catch (err) {
     console.error('Error exporting customers:', err)
-    showNotification(t('Failed to export customers'), 'error')
+    alert(t('Failed to export customers'))
   }
 }
 
@@ -906,5 +992,18 @@ onMounted(() => {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
+}
+
+/* Ensure buttons have adequate touch targets */
+button {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+@media (min-width: 768px) {
+  button {
+    min-height: 36px;
+    min-width: 36px;
+  }
 }
 </style>
